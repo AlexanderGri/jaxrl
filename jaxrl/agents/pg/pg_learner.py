@@ -77,10 +77,12 @@ class PGLearner(object):
     def sample_actions(self,
                        observations: np.ndarray,
                        available_actions: np.ndarray,
-                       temperature: float = 1.0) -> jnp.ndarray:
+                       temperature: float = 1.0,
+                       distribution: str = 'log_prob') -> jnp.ndarray:
         rng, actions = policies.sample_constrained_actions(self.rng, self.actor.apply_fn,
                                                            self.actor.params, observations,
-                                                           available_actions, temperature)
+                                                           available_actions, temperature,
+                                                           distribution)
         self.rng = rng
 
         actions = np.asarray(actions)

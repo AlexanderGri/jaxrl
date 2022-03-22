@@ -181,14 +181,32 @@ def sample_actions(
     return _sample_actions(rng, actor_apply_fn, actor_params, observations,
                            temperature, distribution)
 
+
+@functools.partial(jax.jit, static_argnames=('actor_apply_fn', 'distribution'))
+def _sample_constrained_actions(
+        rng: PRNGKey,
+        actor_apply_fn: Callable[..., Any],
+        actor_params: Params,
+        observations: np.ndarray,
+        available_actions: np.ndarray,
+        temperature: float = 1.0,
+        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray]:
+    dist = actor_apply_fn({'params': actor_params}, observations,
+                          available_actions, temperature)
+    if distribution == 'det':
+        return rng, dist.logits.argmax(axis=-1)
+    else:
+        rng, key = jax.random.split(rng)
+        return rng, dist.sample(seed=key)
+
+
 def sample_constrained_actions(
         rng: PRNGKey,
         actor_apply_fn: Callable[..., Any],
         actor_params: Params,
         observations: np.ndarray,
         available_actions: np.ndarray,
-        temperature: float = 1.0,) -> Tuple[PRNGKey, jnp.ndarray]:
-    dist = actor_apply_fn({'params': actor_params}, observations,
-                          available_actions, temperature)
-    rng, key = jax.random.split(rng)
-    return rng, dist.sample(seed=key)
+        temperature: float = 1.0,
+        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray]:
+    return _sample_constrained_actions(rng, actor_apply_fn, actor_params, observations,
+                                       available_actions, temperature, distribution)
