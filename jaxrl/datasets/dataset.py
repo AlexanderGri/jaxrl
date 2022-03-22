@@ -9,6 +9,12 @@ Batch = collections.namedtuple(
     ['observations', 'actions', 'rewards', 'masks', 'next_observations'])
 
 
+PaddedTrajectoryData = collections.namedtuple(
+    'PaddedTrajectoryData',
+    ['states', 'observations', 'next_states', 'next_observations', 'actions',
+     'available_actions', 'rewards', 'all_agents_alive', 'agent_alive', 'dones', 'length'])
+
+
 def split_into_trajectories(observations, actions, rewards, masks, dones_float,
                             next_observations):
     trajs = [[]]

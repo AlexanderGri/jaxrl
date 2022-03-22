@@ -30,6 +30,29 @@ class Critic(nn.Module):
         return jnp.squeeze(critic, -1)
 
 
+class StateValueCritic(nn.Module):
+    hidden_dims: Sequence[int]
+    activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+
+    @nn.compact
+    def __call__(self, states: jnp.ndarray) -> jnp.ndarray:
+        critic = MLP((*self.hidden_dims, 1),
+                     activations=self.activations)(states)
+        return jnp.squeeze(critic, -1)
+
+
+# class DiscreteActionCritic(nn.Module):
+#     hidden_dims: Sequence[int]
+#     n_actions: int
+#     activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+#
+#     @nn.compact
+#     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
+#         values = MLP((*self.hidden_dims, self.n_actions),
+#                      activations=self.activations)(observations)
+#         return values
+
+
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int]
     activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu

@@ -5,7 +5,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-from flax.linen.module import init
 from tensorflow_probability.substrates import jax as tfp
 
 tfd = tfp.distributions
@@ -15,6 +14,26 @@ from jaxrl.networks.common import MLP, Params, PRNGKey, default_init
 
 LOG_STD_MIN = -10.0
 LOG_STD_MAX = 2.0
+IMPOSSIBLE_ACTION_LOGIT = -1e8
+
+
+class ConstrainedCategoricalPolicy(nn.Module):
+    hidden_dims: Sequence[int]
+    n_actions: int
+
+    @nn.compact
+    def __call__(self,
+                 observations: jnp.ndarray,
+                 available_actions: jnp.ndarray,
+                 temperature: float = 1.0,
+                 training: bool = False) -> tfd.Distribution:
+        outputs = MLP(self.hidden_dims,
+                      activate_final=True)(observations)
+        logits = nn.Dense(self.n_actions)(outputs)
+        # set logits of unavailable actions to -inf
+        masked_logits = jnp.where(available_actions, logits, IMPOSSIBLE_ACTION_LOGIT)
+        base_dist = tfd.Categorical(logits=masked_logits)
+        return base_dist
 
 
 class MSEPolicy(nn.Module):
@@ -161,3 +180,15 @@ def sample_actions(
         distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray]:
     return _sample_actions(rng, actor_apply_fn, actor_params, observations,
                            temperature, distribution)
+
+def sample_constrained_actions(
+        rng: PRNGKey,
+        actor_apply_fn: Callable[..., Any],
+        actor_params: Params,
+        observations: np.ndarray,
+        available_actions: np.ndarray,
+        temperature: float = 1.0,) -> Tuple[PRNGKey, jnp.ndarray]:
+    dist = actor_apply_fn({'params': actor_params}, observations,
+                          available_actions, temperature)
+    rng, key = jax.random.split(rng)
+    return rng, dist.sample(seed=key)
