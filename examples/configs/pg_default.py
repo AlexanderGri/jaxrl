@@ -7,7 +7,8 @@ def get_config():
     config.actor_lr = 3e-4
     config.critic_lr = 3e-4
 
-    config.hidden_dims = (256, 256)
+    config.critic_hidden_dims = (128, 128)
+    config.actor_hidden_dims = (128, 128)
 
     config.discount = 0.99
     config.entropy_coef = 1e-4

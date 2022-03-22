@@ -45,7 +45,8 @@ class PGLearner(object):
                  length: int,
                  actor_lr: float = 3e-4,
                  critic_lr: float = 3e-4,
-                 hidden_dims: Sequence[int] = (256, 256),
+                 critic_hidden_dims: Sequence[int] = (128, 128),
+                 actor_hidden_dims: Sequence[int] = (128, 128),
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3):
 
@@ -56,13 +57,13 @@ class PGLearner(object):
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, critic_key = jax.random.split(rng, 3)
         actor_def = policies.ConstrainedCategoricalPolicy(
-            hidden_dims,
+            actor_hidden_dims,
             n_actions,)
         actor = Model.create(actor_def,
                              inputs=[actor_key, observations, available_actions],
                              tx=optax.adam(learning_rate=actor_lr))
 
-        critic_def = critic_net.StateValueCritic(hidden_dims)
+        critic_def = critic_net.StateValueCritic(critic_hidden_dims)
         critic = Model.create(critic_def,
                               inputs=[critic_key, states],
                               tx=optax.adam(learning_rate=critic_lr))
