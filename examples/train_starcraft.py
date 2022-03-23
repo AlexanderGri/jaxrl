@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Tuple
 import random
@@ -150,6 +151,13 @@ def evaluate(env: StarCraft2Env, agent: PGLearner, n_trajectories: int = 1) -> I
 
 
 def main(_):
+    # disable check_types warnings
+    logger = logging.getLogger("root")
+    class CheckTypesFilter(logging.Filter):
+        def filter(self, record):
+            return "check_types" not in record.getMessage()
+    logger.addFilter(CheckTypesFilter())
+
     summary_writer = SummaryWriter(
         os.path.join(FLAGS.save_dir, 'tb', str(FLAGS.seed)))
 
