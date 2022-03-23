@@ -37,11 +37,11 @@ def update(critic: Model, data: PaddedTrajectoryData, discount: float, length: i
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         padded_v = critic.apply_fn({'params': critic_params}, data.states)
         padded_critic_loss = (padded_v - padded_target_v)**2
-        critic_loss = (padded_critic_loss * data.all_agents_alive).mean()
-
+        all_agents_alive_normalized = data.all_agents_alive / data.all_agents_alive.sum()
+        critic_loss = (padded_critic_loss * all_agents_alive_normalized).sum()
         return critic_loss, {
             'critic_loss': critic_loss,
-            'v': (padded_v * data.all_agents_alive).mean(),
+            'v': (padded_v * all_agents_alive_normalized).sum(),
         }
 
     new_critic, info = critic.apply_gradient(critic_loss_fn)

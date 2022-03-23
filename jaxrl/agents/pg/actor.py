@@ -12,14 +12,15 @@ def update(actor: Model, critic: Model, data: PaddedTrajectoryData,
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         dist = actor.apply_fn({'params': actor_params}, data.observations,
                               data.available_actions)
-        log_probs = dist.log_prob(data.actions)
-        next_values = critic(data.next_states)
-        values = critic(data.states)
-        advantages = data.rewards + discount * next_values - values
-        advantages_expanded = jnp.expand_dims(advantages, axis=2)
-        surrogate = advantages_expanded * log_probs
-        reward_loss = -(surrogate * data.agent_alive).mean()
-        entropy = -(log_probs * data.agent_alive).mean()
+        padded_log_probs = dist.log_prob(data.actions)
+        padded_next_values = critic(data.next_states)
+        padded_values = critic(data.states)
+        padded_advantages = data.rewards + discount * padded_next_values - padded_values
+        padded_advantages_expanded = jnp.expand_dims(padded_advantages, axis=2)
+        padded_surrogate = padded_advantages_expanded * padded_log_probs
+        agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
+        reward_loss = -(padded_surrogate * agent_alive_normalized).sum()
+        entropy = -(padded_log_probs * agent_alive_normalized).sum()
         actor_loss = reward_loss - entropy_coef * entropy
         return actor_loss, {
             'reward_loss': reward_loss,
