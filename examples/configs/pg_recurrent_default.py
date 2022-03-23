@@ -8,8 +8,9 @@ def get_config():
     config.critic_lr = 3e-4
 
     config.critic_hidden_dims = (128, 128)
-    config.actor_hidden_dims = (128, 128)
-    config.use_recurrent_policy = False
+    config.actor_hidden_dims = (64,)
+    config.actor_recurrent_hidden_dim = 64
+    config.use_recurrent_policy = True
 
     config.discount = 0.99
     config.entropy_coef = 1e-4

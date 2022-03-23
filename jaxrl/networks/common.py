@@ -1,3 +1,4 @@
+import functools
 import os
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
@@ -18,6 +19,25 @@ PRNGKey = Any
 Shape = Sequence[int]
 Dtype = Any  # this could be a real type?
 InfoDict = Dict[str, float]
+
+
+class GRU(nn.Module):
+
+    @functools.partial(
+        nn.transforms.scan,
+        variable_broadcast='params',
+        in_axes=2, out_axes=2,
+        split_rngs={'params': False})
+    @nn.compact
+    def __call__(self, carry: jnp.ndarray, x: jnp.ndarray):
+        return nn.GRUCell()(carry, x)
+
+    @staticmethod
+    def initialize_carry(batch_dims: Shape,
+                         hidden_size: int):
+        assert len(batch_dims) == 2
+        return nn.GRUCell.initialize_carry(jax.random.PRNGKey(0),
+                                           batch_dims, hidden_size)
 
 
 class MLP(nn.Module):

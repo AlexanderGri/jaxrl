@@ -1,5 +1,5 @@
 import functools
-from typing import Any, Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -10,11 +10,36 @@ from tensorflow_probability.substrates import jax as tfp
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-from jaxrl.networks.common import MLP, Params, PRNGKey, default_init
+from jaxrl.networks.common import MLP, GRU, Params, PRNGKey, default_init
 
 LOG_STD_MIN = -10.0
 LOG_STD_MAX = 2.0
 IMPOSSIBLE_ACTION_LOGIT = -1e8
+
+
+class RecurrentConstrainedCategoricalPolicy(nn.Module):
+    hidden_dims: Sequence[int]
+    recurrent_hidden_dim: int
+    n_actions: int
+
+    @nn.compact
+    def __call__(self,
+                 carry: jnp.ndarray,
+                 observations: jnp.ndarray,
+                 available_actions: jnp.ndarray,
+                 temperature: float = 1.0,
+                 training: bool = False):
+        inputs = MLP(self.hidden_dims, activate_final=True)(observations)
+        # time dimension should be third
+        # traj x time x agent x dim -> traj x agent x time x dim
+        transposed_inputs = inputs.transpose((0, 2, 1, 3))
+        new_carry, transposed_outputs = GRU()(carry, transposed_inputs)
+        outputs = transposed_outputs.transpose((0, 2, 1, 3))
+        logits = nn.Dense(self.n_actions)(outputs)
+        # set logits of unavailable actions to -inf
+        masked_logits = jnp.where(available_actions, logits, IMPOSSIBLE_ACTION_LOGIT)
+        base_dist = tfd.Categorical(logits=masked_logits)
+        return new_carry, base_dist
 
 
 class ConstrainedCategoricalPolicy(nn.Module):
@@ -200,13 +225,40 @@ def _sample_constrained_actions(
         return rng, dist.sample(seed=key)
 
 
+@functools.partial(jax.jit, static_argnames=('actor_apply_fn', 'distribution'))
+def _sample_constrained_actions_recurrent(
+        rng: PRNGKey,
+        actor_apply_fn: Callable[..., Any],
+        actor_params: Params,
+        carry: np.ndarray,
+        observations: np.ndarray,
+        available_actions: np.ndarray,
+        temperature: float = 1.0,
+        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray, jnp.ndarray]:
+    new_carry, dist = actor_apply_fn({'params': actor_params},
+                                     carry, observations,
+                                     available_actions, temperature)
+    if distribution == 'det':
+        return rng, new_carry, dist.logits.argmax(axis=-1)
+    else:
+        rng, key = jax.random.split(rng)
+        return rng, new_carry, dist.sample(seed=key)
+
+
 def sample_constrained_actions(
         rng: PRNGKey,
         actor_apply_fn: Callable[..., Any],
         actor_params: Params,
         observations: np.ndarray,
         available_actions: np.ndarray,
+        carry: Optional[jnp.ndarray] = None,
         temperature: float = 1.0,
-        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray]:
-    return _sample_constrained_actions(rng, actor_apply_fn, actor_params, observations,
-                                       available_actions, temperature, distribution)
+        distribution: str = 'log_prob') \
+        -> Union[Tuple[PRNGKey, jnp.ndarray], Tuple[PRNGKey, jnp.ndarray, jnp.ndarray]]:
+    if carry is None:
+        return _sample_constrained_actions(rng, actor_apply_fn, actor_params, observations,
+                                           available_actions, temperature, distribution)
+    else:
+        return _sample_constrained_actions_recurrent(rng, actor_apply_fn, actor_params, carry,
+                                                     observations, available_actions,
+                                                     temperature, distribution)
