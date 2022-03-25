@@ -8,6 +8,7 @@ flax >= 0.3.5
 jax >= 0.2.26
 ml_collections >= 0.1.0
 optax >= 0.0.6
+smac @ git+https://github.com/oxwhirl/smac.git
 tensorboardX == 2.1
 tensorflow-probability >= 0.15.0
 # imageio >= 2.9.0
