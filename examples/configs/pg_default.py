@@ -12,6 +12,7 @@ def get_config():
     config.use_recurrent_policy = False
 
     config.discount = 0.99
-    config.entropy_coef = 1e-4
+    config.entropy_coef = 1e-3
+    config.mix_coef = 0.01
 
     return config

@@ -6,3 +6,4 @@ from jaxrl.agents.redq.redq_learner import REDQLearner
 from jaxrl.agents.sac.sac_learner import SACLearner
 from jaxrl.agents.sac_v1.sac_v1_learner import SACV1Learner
 from jaxrl.agents.pg.pg_learner import PGLearner
+from jaxrl.agents.meta_reward_pg.meta_pg_learner import MetaPGLearner

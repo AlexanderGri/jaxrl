@@ -10,7 +10,7 @@ from ml_collections import config_flags
 from jax import numpy as jnp
 from tensorboardX import SummaryWriter
 
-from jaxrl.agents import PGLearner
+from jaxrl.agents import PGLearner, MetaPGLearner
 from jaxrl.datasets import PaddedTrajectoryData
 from smac.env import StarCraft2Env
 
@@ -29,6 +29,7 @@ flags.DEFINE_integer('max_steps', int(1e5), 'Number of training steps.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_replay', True, 'Save videos during evaluation.')
 flags.DEFINE_boolean('use_recurrent_policy', True, 'Use recurrent policy')
+flags.DEFINE_boolean('use_meta_rewards', True, 'Use meta rewards')
 config_flags.DEFINE_config_file(
     'config',
     'configs/pg_recurrent_default.py' if FLAGS.use_recurrent_policy else 'configs/pg_default.py',
@@ -147,10 +148,10 @@ def evaluate(env: StarCraft2Env, agent: PGLearner, n_trajectories: int = 1,
         if use_recurrent_policy:
             carry = agent.initialize_carry(1, env.get_env_info()['n_agents'])
         while not done:
+            # adding two leading dimensions accounting for trajectories and steps
             observations = np.stack(env.get_obs())[np.newaxis, np.newaxis]
             available_actions = np.stack(env.get_avail_actions())[np.newaxis, np.newaxis]
             if use_recurrent_policy:
-                # adding two leading dimensions accounting for trajectories and steps
                 carry, actions = agent.sample_actions(
                     observations,
                     available_actions,
@@ -205,13 +206,19 @@ def main(_):
 
     kwargs = dict(FLAGS.config)
 
-    agent = PGLearner(FLAGS.seed,
-                      dummy_states_batch,
-                      dummy_observations_batch,
-                      dummy_available_actions_batch,
-                      env_info["n_actions"],
-                      env_info["episode_limit"],
-                      **kwargs)
+    if FLAGS.use_meta_rewards:
+        Learner = MetaPGLearner
+        kwargs["n_agents"] = env_info["n_agents"]
+    else:
+        Learner = PGLearner
+
+    agent = Learner(FLAGS.seed,
+                    dummy_states_batch,
+                    dummy_observations_batch,
+                    dummy_available_actions_batch,
+                    env_info["n_actions"],
+                    env_info["episode_limit"],
+                    **kwargs)
 
     total_steps = 0
     for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),

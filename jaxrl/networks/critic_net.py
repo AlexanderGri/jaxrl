@@ -41,16 +41,44 @@ class StateValueCritic(nn.Module):
         return jnp.squeeze(critic, -1)
 
 
-# class DiscreteActionCritic(nn.Module):
-#     hidden_dims: Sequence[int]
-#     n_actions: int
-#     activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
-#
-#     @nn.compact
-#     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
-#         values = MLP((*self.hidden_dims, self.n_actions),
-#                      activations=self.activations)(observations)
-#         return values
+class RewardAndCritics(nn.Module):
+    hidden_dims: Sequence[int]
+    n_agents: int
+    n_actions: int
+    activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+
+    def setup(self):
+        self.input_to_hidden = MLP((*self.hidden_dims[:-1], self.hidden_dims[-1]),
+                                   activations=self.activations)
+        self.hidden_to_rewards = nn.Dense(self.n_agents * self.n_actions)
+        self.hidden_to_values = nn.vmap(nn.Dense,
+                                        variable_axes={'params': 0},
+                                        split_rngs={'params': True},
+                                        in_axes=None,
+                                        out_axes=-1,
+                                        axis_size=self.n_agents)(1)
+
+    def __call__(self, states: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        hiddens = self.input_to_hidden(states)
+        rewards = self.hidden_to_rewards(hiddens)
+        rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        rewards = jnp.tanh(rewards)
+        values = self.hidden_to_values(hiddens)
+        values_squeezed = jnp.squeeze(values, -2)
+        return rewards, values_squeezed
+
+    def get_rewards(self, states: jnp.ndarray) -> jnp.ndarray:
+        hiddens = self.input_to_hidden(states)
+        rewards = self.hidden_to_rewards(hiddens)
+        rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        rewards = jnp.tanh(rewards)
+        return rewards
+
+    def get_values(self, states: jnp.ndarray) -> jnp.ndarray:
+        hiddens = self.input_to_hidden(states)
+        values = self.hidden_to_values(hiddens)
+        values_squeezed = jnp.squeeze(values, -2)
+        return values_squeezed
 
 
 class DoubleCritic(nn.Module):
