@@ -211,6 +211,8 @@ def main(_):
         Learner = MetaPGLearner
         kwargs["n_agents"] = env_info["n_agents"]
     else:
+        if 'mix_coef' in kwargs:
+            del kwargs['mix_coef']
         Learner = PGLearner
 
     agent = Learner(FLAGS.seed,
