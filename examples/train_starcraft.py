@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 
 from jaxrl.agents import PGLearner, MetaPGLearner
 from jaxrl.datasets import PaddedTrajectoryData
+from jaxrl.utils import StepCounter
 from smac.env import StarCraft2Env
 
 FLAGS = flags.FLAGS
@@ -20,12 +21,12 @@ flags.DEFINE_string('map_name', '2s3z', 'Map name.')
 flags.DEFINE_string('save_dir', './tmp/', 'Tensorboard logging dir.')
 flags.DEFINE_integer('seed', 45, 'Random seed.')
 flags.DEFINE_integer('eval_episodes', 10, 'Number of episodes used for evaluation.')
-flags.DEFINE_integer('log_interval', 1, 'Logging interval.')
-flags.DEFINE_integer('replay_interval', 50, 'Replay interval.')
-flags.DEFINE_integer('eval_interval', 100, 'Eval interval.')
-flags.DEFINE_integer('trajectories_per_update', 5, 'Number of trajectories collected per each step')
-flags.DEFINE_integer('updates_per_step', 1, 'Gradient updates per step.')
-flags.DEFINE_integer('max_steps', int(1e5), 'Number of training steps.')
+flags.DEFINE_integer('log_interval', int(1e3), 'Logging interval in environment steps.')
+flags.DEFINE_integer('replay_interval', int(5e4), 'Replay interval in environment steps.')
+flags.DEFINE_integer('eval_interval', int(1e4), 'Evaluation interval in environment steps.')
+flags.DEFINE_integer('save_interval', int(1e5), 'Model save interval in environment steps.')
+flags.DEFINE_integer('trajectories_per_update', 1, 'Number of trajectories collected per each step')
+flags.DEFINE_integer('max_steps', int(1e6), 'Total number of training environment interactions.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_replay', True, 'Save videos during evaluation.')
 flags.DEFINE_boolean('use_recurrent_policy', True, 'Use recurrent policy')
@@ -220,32 +221,33 @@ def main(_):
                     env_info["episode_limit"],
                     **kwargs)
 
-    total_steps = 0
-    for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),
-                       smoothing=0.1,
-                       disable=not FLAGS.tqdm):
+    interval_keys = ['eval', 'log', 'replay', 'save']
+    intervals = [getattr(FLAGS, f'{key}_interval') for key in interval_keys ]
+    step_counter = StepCounter(interval_keys, intervals)
+    it = 0
+    while step_counter.total_steps < FLAGS.max_steps:
+        data, rollout_info = collect_trajectories(env, agent,
+                                                  n_trajectories=FLAGS.trajectories_per_update,
+                                                  use_recurrent_policy=FLAGS.use_recurrent_policy,
+                                                  save_replay=step_counter.check_key('replay'),)
+        step_counter.update(rollout_info['iter_steps'])
+        it += 1
+        update_info = agent.update(data)
 
-        data, info = collect_trajectories(env, agent,
-                                          n_trajectories=FLAGS.trajectories_per_update,
-                                          save_replay=i % FLAGS.replay_interval == 0,
-                                          use_recurrent_policy=FLAGS.use_recurrent_policy)
-        total_steps += info['iter_steps']
-        for _ in range(FLAGS.updates_per_step):
-            update_info = agent.update(data)
-
-        if i % FLAGS.log_interval == 0:
-            summary_writer.add_scalar(f'training/total_steps', total_steps, i)
+        if step_counter.check_key('log'):
+            summary_writer.add_scalar(f'training/total_steps', step_counter.total_steps, it)
             for k, v in update_info.items():
-                summary_writer.add_scalar(f'training/{k}', v, i)
-            for k, v in info.items():
-                summary_writer.add_scalar(f'training/{k}', v, i)
+                summary_writer.add_scalar(f'training/{k}', v, it)
+            for k, v in rollout_info.items():
+                summary_writer.add_scalar(f'training/{k}', v, it)
             summary_writer.flush()
 
-        if i % FLAGS.eval_interval == 0:
-            eval_info = evaluate(env, agent, n_trajectories=FLAGS.eval_episodes,
+        if step_counter.check_key('eval'):
+            eval_info = evaluate(env, agent,
+                                 n_trajectories=FLAGS.eval_episodes,
                                  use_recurrent_policy=FLAGS.use_recurrent_policy)
             for k, v in eval_info.items():
-                summary_writer.add_scalar(f'eval/{k}', v, i)
+                summary_writer.add_scalar(f'eval/{k}', v, it)
 
 if __name__ == '__main__':
     app.run(main)

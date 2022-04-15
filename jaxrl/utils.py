@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 import gym
 from gym.wrappers import RescaleAction
@@ -77,3 +77,24 @@ def make_env(env_name: str,
     env.observation_space.seed(seed)
 
     return env
+
+
+class StepCounter:
+    def __init__(self, keys: List[str], intervals: List[int]):
+        self.keys = keys
+        self.intervals = intervals
+        self.next_moments = [1] * len(self.keys)
+        self.total_steps = 0
+
+    def update(self, new_steps: int):
+        self.total_steps += new_steps
+        self.interval_ends = []
+        for i, (next_moment, interval) in enumerate(zip(self.next_moments,
+                                                        self.intervals)):
+            interval_end = (self.total_steps >= next_moment * interval)
+            self.interval_ends.append(interval_end)
+            if interval_end:
+                self.next_moments[i] = self.total_steps // interval + 1
+
+    def check_key(self, key: str) -> bool:
+        return self.interval_ends[self.keys.index(key)]
