@@ -193,3 +193,8 @@ class MetaPGLearner(object):
 
     def initialize_carry(self, n_trajectories, n_agents):
         return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
+
+    def save(self, path):
+        self.actor.save(f'{path}_actor')
+        self.intrinsic_critics.save(f'{path}_intrinsic_critics')
+        self.extrinsic_critic.save(f'{path}_extrinsic_critic')

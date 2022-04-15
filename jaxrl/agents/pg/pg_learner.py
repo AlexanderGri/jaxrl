@@ -150,3 +150,7 @@ class PGLearner(object):
 
     def initialize_carry(self, n_trajectories, n_agents):
         return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
+
+    def save(self, path):
+        self.actor.save(f'{path}_actor')
+        self.critic.save(f'{path}_critic')

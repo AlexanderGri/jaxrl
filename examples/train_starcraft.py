@@ -26,7 +26,7 @@ flags.DEFINE_integer('replay_interval', int(5e4), 'Replay interval in environmen
 flags.DEFINE_integer('eval_interval', int(1e4), 'Evaluation interval in environment steps.')
 flags.DEFINE_integer('save_interval', int(1e5), 'Model save interval in environment steps.')
 flags.DEFINE_integer('trajectories_per_update', 1, 'Number of trajectories collected per each step')
-flags.DEFINE_integer('max_steps', int(1e6), 'Total number of training environment interactions.')
+flags.DEFINE_integer('max_steps', int(1e6) + 1, 'Total number of training environment interactions.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_boolean('save_replay', True, 'Save videos during evaluation.')
 flags.DEFINE_boolean('use_recurrent_policy', True, 'Use recurrent policy')
@@ -250,6 +250,13 @@ def main(_):
                                  use_recurrent_policy=FLAGS.use_recurrent_policy)
             for k, v in eval_info.items():
                 summary_writer.add_scalar(f'eval/{k}', v, it)
+        if step_counter.check_key('save'):
+            dump_dir = os.path.join(FLAGS.save_dir, 'models')
+            if not os.path.exists(dump_dir):
+                os.makedirs(dump_dir)
+            model_path_prefix = os.path.join(dump_dir, f'step_{step_counter.total_steps}')
+            agent.save(model_path_prefix)
+
 
 if __name__ == '__main__':
     app.run(main)
