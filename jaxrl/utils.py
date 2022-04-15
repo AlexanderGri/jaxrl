@@ -84,15 +84,15 @@ class StepCounter:
         self.keys = keys
         self.intervals = intervals
         self.next_moments = [1] * len(self.keys)
+        self.interval_ends = [False] * len(self.keys)
         self.total_steps = 0
 
     def update(self, new_steps: int):
         self.total_steps += new_steps
-        self.interval_ends = []
         for i, (next_moment, interval) in enumerate(zip(self.next_moments,
                                                         self.intervals)):
             interval_end = (self.total_steps >= next_moment * interval)
-            self.interval_ends.append(interval_end)
+            self.interval_ends[i] = interval_end
             if interval_end:
                 self.next_moments[i] = self.total_steps // interval + 1
 
