@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import os
 from typing import Tuple
@@ -18,8 +19,10 @@ from smac.env import StarCraft2Env
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('map_name', '2s3z', 'Map name.')
-flags.DEFINE_string('save_dir', './tmp/', 'Tensorboard logging dir.')
 flags.DEFINE_integer('seed', 45, 'Random seed.')
+run_dir_path = os.path.join(os.path.dirname(__file__), datetime.now().strftime("%Y%m%d-%H%M%S"))
+os.makedirs(run_dir_path)
+flags.DEFINE_string('save_dir', run_dir_path, 'Logging dir.')
 flags.DEFINE_integer('eval_episodes', 10, 'Number of episodes used for evaluation.')
 flags.DEFINE_integer('log_interval', int(1e3), 'Logging interval in environment steps.')
 flags.DEFINE_integer('replay_interval', int(5e4), 'Replay interval in environment steps.')
@@ -33,7 +36,7 @@ flags.DEFINE_boolean('use_recurrent_policy', True, 'Use recurrent policy')
 flags.DEFINE_boolean('use_meta_rewards', True, 'Use meta rewards')
 config_flags.DEFINE_config_file(
     'config',
-    'configs/pg_recurrent_default.py' if FLAGS.use_recurrent_policy else 'configs/pg_default.py',
+    'pg_recurrent_default.py' if FLAGS.use_recurrent_policy else 'pg_default.py',
     'File path to the training hyperparameter configuration.',
     lock_config=False)
 
@@ -43,8 +46,9 @@ InfoDict = dict
 
 def collect_trajectories(env: StarCraft2Env, agent: PGLearner,
                          n_trajectories: int = 1, save_replay: bool = False,
-                         use_recurrent_policy: bool = False) \
+                         replay_prefix: str = None, use_recurrent_policy: bool = False) \
         -> Tuple[PaddedTrajectoryData, InfoDict]:
+    env.replay_prefix = replay_prefix
     env_info = env.get_env_info()
     state_dim = env_info['state_shape']
     obs_dim = env_info['obs_shape']
@@ -187,11 +191,12 @@ def main(_):
             return "check_types" not in record.getMessage()
     logger.addFilter(CheckTypesFilter())
 
-    summary_writer = SummaryWriter(
-        os.path.join(FLAGS.save_dir, 'tb', str(FLAGS.seed)))
+    summary_writer = SummaryWriter(os.path.join(FLAGS.save_dir, 'tb'))
 
     if FLAGS.save_replay:
         replay_dir = os.path.join(FLAGS.save_dir, 'replay')
+        if not os.path.exists(replay_dir):
+            os.makedirs(replay_dir)
     else:
         replay_dir = None
 
@@ -231,7 +236,8 @@ def main(_):
         data, rollout_info = collect_trajectories(env, agent,
                                                   n_trajectories=FLAGS.trajectories_per_update,
                                                   use_recurrent_policy=FLAGS.use_recurrent_policy,
-                                                  save_replay=step_counter.check_key('replay'),)
+                                                  save_replay=step_counter.check_key('replay'),
+                                                  replay_prefix=f'step_{step_counter.total_steps}_')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
         update_info = agent.update(data)
