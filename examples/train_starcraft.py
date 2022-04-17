@@ -4,6 +4,7 @@ import os
 from typing import Tuple
 import random
 
+import gtimer as gt
 import numpy as np
 import tqdm
 from absl import app, flags
@@ -232,23 +233,37 @@ def main(_):
     intervals = [getattr(FLAGS, f'{key}_interval') for key in interval_keys ]
     step_counter = StepCounter(interval_keys, intervals)
     it = 0
+    gt.reset_root()
+    gt.rename_root('RL_algorithm')
+    gt.set_def_unique(False)
+    timer_loop = gt.timed_loop('train_loop')
     while step_counter.total_steps < FLAGS.max_steps:
+        next(timer_loop)
         data, rollout_info = collect_trajectories(env, agent,
                                                   n_trajectories=FLAGS.trajectories_per_update,
                                                   use_recurrent_policy=FLAGS.use_recurrent_policy,
                                                   save_replay=step_counter.check_key('replay'),
                                                   replay_prefix=f'step_{step_counter.total_steps}_')
+        gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
         update_info = agent.update(data)
+        gt.stamp('train')
 
         if step_counter.check_key('log'):
+            time_diagnostics = {
+                key: times[-1]
+                for key, times in gt.get_times().stamps.itrs.items()
+            }
+            for k, v in time_diagnostics.items():
+                summary_writer.add_scalar(f'time_{k}', v, it)
             summary_writer.add_scalar(f'training/total_steps', step_counter.total_steps, it)
             for k, v in update_info.items():
                 summary_writer.add_scalar(f'training/{k}', v, it)
             for k, v in rollout_info.items():
                 summary_writer.add_scalar(f'training/{k}', v, it)
             summary_writer.flush()
+            gt.stamp('log')
 
         if step_counter.check_key('eval'):
             eval_info = evaluate(env, agent,
@@ -256,12 +271,14 @@ def main(_):
                                  use_recurrent_policy=FLAGS.use_recurrent_policy)
             for k, v in eval_info.items():
                 summary_writer.add_scalar(f'eval/{k}', v, it)
+            gt.stamp('eval')
         if step_counter.check_key('save'):
             dump_dir = os.path.join(FLAGS.save_dir, 'models')
             if not os.path.exists(dump_dir):
                 os.makedirs(dump_dir)
             model_path_prefix = os.path.join(dump_dir, f'step_{step_counter.total_steps}')
             agent.save(model_path_prefix)
+            gt.stamp('save')
 
 
 if __name__ == '__main__':
