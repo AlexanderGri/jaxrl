@@ -236,9 +236,7 @@ def main(_):
     gt.reset_root()
     gt.rename_root('RL_algorithm')
     gt.set_def_unique(False)
-    timer_loop = gt.timed_loop('train_loop')
     while step_counter.total_steps < FLAGS.max_steps:
-        next(timer_loop)
         data, rollout_info = collect_trajectories(env, agent,
                                                   n_trajectories=FLAGS.trajectories_per_update,
                                                   use_recurrent_policy=FLAGS.use_recurrent_policy,
