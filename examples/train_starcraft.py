@@ -1,4 +1,3 @@
-from datetime import datetime
 import json
 import logging
 import os
@@ -19,27 +18,9 @@ from jaxrl.utils import StepCounter
 from smac.env import StarCraft2Env
 
 FLAGS = flags.FLAGS
-
-flags.DEFINE_string('map_name', '2s3z', 'Map name.')
-flags.DEFINE_integer('seed', 45, 'Random seed.')
-run_dir_path = os.path.join(os.path.dirname(__file__), datetime.now().strftime("%Y%m%d-%H%M%S"))
-os.makedirs(run_dir_path)
-flags.DEFINE_string('save_dir', run_dir_path, 'Logging dir.')
-flags.DEFINE_integer('eval_episodes', 10, 'Number of episodes used for evaluation.')
-flags.DEFINE_integer('log_interval', int(1e3), 'Logging interval in environment steps.')
-flags.DEFINE_integer('replay_interval', int(5e4), 'Replay interval in environment steps.')
-flags.DEFINE_integer('eval_interval', int(1e4), 'Evaluation interval in environment steps.')
-flags.DEFINE_integer('save_interval', int(1e5), 'Model save interval in environment steps.')
-flags.DEFINE_integer('trajectories_per_update', 1, 'Number of trajectories collected per each step')
-flags.DEFINE_integer('max_steps', int(1e6) + 1, 'Total number of training environment interactions.')
-flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
-flags.DEFINE_boolean('save_replay', True, 'Save videos during evaluation.')
-flags.DEFINE_boolean('use_recurrent_policy', True, 'Use recurrent policy')
-flags.DEFINE_boolean('use_meta_rewards', True, 'Use meta rewards')
 config_flags.DEFINE_config_file(
     'config',
-    'pg_recurrent_default.py' if FLAGS.use_recurrent_policy else 'pg_default.py',
-    'File path to the training hyperparameter configuration.',
+    os.path.join(os.path.dirname(__file__), 'config.py'),
     lock_config=False)
 
 
@@ -193,56 +174,55 @@ def main(_):
             return "check_types" not in record.getMessage()
     logger.addFilter(CheckTypesFilter())
 
-    summary_writer = SummaryWriter(os.path.join(FLAGS.save_dir, 'tb'))
+    config = FLAGS.config
+    FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
 
-    if FLAGS.save_replay:
-        replay_dir = os.path.join(FLAGS.save_dir, 'replay')
+    summary_writer = SummaryWriter(os.path.join(config.save_dir, 'tb'))
+
+    if config.save_replay:
+        replay_dir = os.path.join(config.save_dir, 'replay')
         if not os.path.exists(replay_dir):
             os.makedirs(replay_dir)
     else:
         replay_dir = None
 
-    env = StarCraft2Env(map_name=FLAGS.map_name, replay_dir=replay_dir)
+    env = StarCraft2Env(map_name=config.map_name, replay_dir=replay_dir)
 
     env_info = env.get_env_info()
     dummy_states_batch = np.ones((1, 1, env_info['state_shape']))
     dummy_observations_batch = np.ones((1, 1, 1, env_info['obs_shape']))
     dummy_available_actions_batch = np.zeros((1, 1, 1, env_info["n_actions"],), dtype=bool)
 
-    np.random.seed(FLAGS.seed)
-    random.seed(FLAGS.seed)
+    np.random.seed(config.seed)
+    random.seed(config.seed)
 
-    kwargs = dict(FLAGS.config)
-    with open(os.path.join(FLAGS.save_dir, 'kwargs'), 'w') as f:
-        f.write(json.dumps(kwargs))
 
-    if FLAGS.use_meta_rewards:
+    learner_kwargs = dict(config.learner_kwargs)
+    if config.use_meta_rewards:
         Learner = MetaPGLearner
-        kwargs["n_agents"] = env_info["n_agents"]
+        learner_kwargs["n_agents"] = env_info["n_agents"]
     else:
-        if 'mix_coef' in kwargs:
-            del kwargs['mix_coef']
         Learner = PGLearner
 
-    agent = Learner(FLAGS.seed,
+    agent = Learner(config.seed,
                     dummy_states_batch,
                     dummy_observations_batch,
                     dummy_available_actions_batch,
                     env_info["n_actions"],
                     env_info["episode_limit"],
-                    **kwargs)
+                    **learner_kwargs)
 
     interval_keys = ['eval', 'log', 'replay', 'save']
-    intervals = [getattr(FLAGS, f'{key}_interval') for key in interval_keys ]
+    intervals = [getattr(config, f'{key}_interval') for key in interval_keys ]
     step_counter = StepCounter(interval_keys, intervals)
     it = 0
     gt.reset_root()
     gt.rename_root('RL_algorithm')
     gt.set_def_unique(False)
-    while step_counter.total_steps < FLAGS.max_steps:
+    while step_counter.total_steps < config.max_steps:
         data, rollout_info = collect_trajectories(env, agent,
-                                                  n_trajectories=FLAGS.trajectories_per_update,
-                                                  use_recurrent_policy=FLAGS.use_recurrent_policy,
+                                                  n_trajectories=config.trajectories_per_update,
+                                                  use_recurrent_policy=config.use_recurrent_policy,
                                                   save_replay=step_counter.check_key('replay'),
                                                   replay_prefix=f'step_{step_counter.total_steps}_')
         gt.stamp('collect_data')
@@ -268,13 +248,13 @@ def main(_):
 
         if step_counter.check_key('eval'):
             eval_info = evaluate(env, agent,
-                                 n_trajectories=FLAGS.eval_episodes,
-                                 use_recurrent_policy=FLAGS.use_recurrent_policy)
+                                 n_trajectories=config.eval_episodes,
+                                 use_recurrent_policy=config.use_recurrent_policy)
             for k, v in eval_info.items():
                 summary_writer.add_scalar(f'eval/{k}', v, it)
             gt.stamp('eval')
         if step_counter.check_key('save'):
-            dump_dir = os.path.join(FLAGS.save_dir, 'models')
+            dump_dir = os.path.join(config.save_dir, 'models')
             if not os.path.exists(dump_dir):
                 os.makedirs(dump_dir)
             model_path_prefix = os.path.join(dump_dir, f'step_{step_counter.total_steps}')
