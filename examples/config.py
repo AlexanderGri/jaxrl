@@ -28,13 +28,15 @@ def get_config():
         'entropy_coef': 1e-3
     }
 
-    if config.use_recurrent_policy:
-        config.learner_kwargs['actor_hidden_dims'] = (64,)
-        config.learner_kwargs['actor_recurrent_hidden_dim'] = 64
-    else:
-        config.learner_kwargs['actor_hidden_dims'] = (128, 128)
-
-    if config.use_meta_rewards:
-        config.learner_kwargs.mix_coef = 0.01
+    config.recurrent_policy_kwargs = {
+        'actor_hidden_dims': (64,),
+        'actor_recurrent_hidden_dim': 64
+    }
+    config.policy_kwargs = {
+        'actor_hidden_dims': (128, 128)
+    }
+    config.meta_kwargs = {
+        'mix_coef': 0.01
+    }
 
     return config
