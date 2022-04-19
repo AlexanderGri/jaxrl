@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import logging
 import os
 from typing import Tuple
@@ -212,6 +213,8 @@ def main(_):
     random.seed(FLAGS.seed)
 
     kwargs = dict(FLAGS.config)
+    with open(os.path.join(FLAGS.save_dir, 'kwargs'), 'w') as f:
+        f.write(json.dumps(kwargs))
 
     if FLAGS.use_meta_rewards:
         Learner = MetaPGLearner
