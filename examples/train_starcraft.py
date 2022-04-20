@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Tuple, Any
+from typing import Tuple, Union
 import random
 
 import gtimer as gt
@@ -27,7 +27,7 @@ config_flags.DEFINE_config_file(
 InfoDict = dict
 
 
-def collect_trajectories(env: StarCraft2Env, agent: Any[PGLearner, MetaPGLearner],
+def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearner],
                          n_trajectories: int = 1, save_replay: bool = False,
                          replay_prefix: str = None, use_recurrent_policy: bool = False) \
         -> Tuple[PaddedTrajectoryData, InfoDict]:
