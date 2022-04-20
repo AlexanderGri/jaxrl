@@ -89,6 +89,7 @@ class MetaPGLearner(object):
                  actor_hidden_dims: Sequence[int] = (64,),
                  actor_recurrent_hidden_dim: int = 64,
                  use_recurrent_policy: bool = True,
+                 use_shared_reward: bool = False,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01):
@@ -123,7 +124,8 @@ class MetaPGLearner(object):
         extrinsic_critic = Model.create(extrinsic_critic_def,
                                         inputs=[extrinsic_critic_key, states],
                                         tx=optax.adam(learning_rate=critic_lr))
-        intrinsic_critic_def = critic_net.RewardAndCritics(critic_hidden_dims, n_agents, n_actions)
+        intrinsic_critic_def = critic_net.RewardAndCritics(critic_hidden_dims, n_agents, n_actions,
+                                                           use_shared_reward)
         intrinsic_critics = Model.create(intrinsic_critic_def,
                                          inputs=[intrinsic_critics_key, states],
                                          tx=optax.adam(learning_rate=critic_lr))

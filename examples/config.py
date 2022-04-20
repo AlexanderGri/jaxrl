@@ -36,7 +36,8 @@ def get_config():
         'actor_hidden_dims': (128, 128)
     }
     config.meta_kwargs = {
-        'mix_coef': 0.01
+        'mix_coef': 0.01,
+        'use_shared_reward': False
     }
 
     return config

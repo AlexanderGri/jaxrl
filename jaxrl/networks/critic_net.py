@@ -45,12 +45,16 @@ class RewardAndCritics(nn.Module):
     hidden_dims: Sequence[int]
     n_agents: int
     n_actions: int
+    use_shared_reward: False
     activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
 
     def setup(self):
         self.input_to_hidden = MLP((*self.hidden_dims[:-1], self.hidden_dims[-1]),
                                    activations=self.activations)
-        self.hidden_to_rewards = nn.Dense(self.n_agents * self.n_actions)
+        if self.use_shared_reward:
+            self.hidden_to_rewards = nn.Dense(self.n_actions)
+        else:
+            self.hidden_to_rewards = nn.Dense(self.n_agents * self.n_actions)
         self.hidden_to_values = nn.vmap(nn.Dense,
                                         variable_axes={'params': 0},
                                         split_rngs={'params': True},
@@ -61,7 +65,11 @@ class RewardAndCritics(nn.Module):
     def __call__(self, states: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         hiddens = self.input_to_hidden(states)
         rewards = self.hidden_to_rewards(hiddens)
-        rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        if self.use_shared_reward:
+            rewards = jnp.broadcast_to(rewards[..., None, :],
+                                       (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        else:
+            rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
         rewards = jnp.tanh(rewards)
         values = self.hidden_to_values(hiddens)
         values_squeezed = jnp.squeeze(values, -2)
@@ -70,7 +78,11 @@ class RewardAndCritics(nn.Module):
     def get_rewards(self, states: jnp.ndarray) -> jnp.ndarray:
         hiddens = self.input_to_hidden(states)
         rewards = self.hidden_to_rewards(hiddens)
-        rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        if self.use_shared_reward:
+            rewards = jnp.broadcast_to(rewards[..., None, :],
+                                       (*rewards.shape[:-1], self.n_agents, self.n_actions))
+        else:
+            rewards = jnp.reshape(rewards, (*rewards.shape[:-1], self.n_agents, self.n_actions))
         rewards = jnp.tanh(rewards)
         return rewards
 
