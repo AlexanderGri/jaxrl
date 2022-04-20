@@ -177,8 +177,10 @@ def main(_):
     config = FLAGS.config
     if config.use_recurrent_policy:
         config.learner_kwargs.update(config.recurrent_policy_kwargs)
+        config.learner_kwargs.use_recurrent_policy = True
     else:
         config.learner_kwargs.update(config.policy_kwargs)
+        config.learner_kwargs.use_recurrent_policy = False
     if config.use_meta_rewards:
         config.learner_kwargs.update(config.meta_kwargs)
     FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
