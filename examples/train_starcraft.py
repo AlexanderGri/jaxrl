@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from typing import Tuple, Union
 import random
 
@@ -240,12 +241,11 @@ def main(_):
         gt.stamp('train')
 
         if step_counter.check_key('log'):
-            time_diagnostics = {
-                key: times[-1]
-                for key, times in gt.get_times().stamps.itrs.items()
-            }
-            for k, v in time_diagnostics.items():
-                summary_writer.add_scalar(f'time_{k}', v, it)
+            time_report_raw = gt.report(include_stats=False,
+                                    delim_mode=True)
+            times = dict(re.findall('\n(\S+)\t(\d+\.\d+)', time_report_raw))
+            for k, v in times.items():
+                summary_writer.add_scalar(f'time_{k}', float(v), it)
             summary_writer.add_scalar(f'training/total_steps', step_counter.total_steps, it)
             for k, v in update_info.items():
                 summary_writer.add_scalar(f'training/{k}', v, it)
