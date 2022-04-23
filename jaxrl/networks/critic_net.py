@@ -50,7 +50,7 @@ class RewardAndCritics(nn.Module):
 
     def setup(self):
         self.input_to_hidden = MLP((*self.hidden_dims[:-1], self.hidden_dims[-1]),
-                                   activations=self.activations)
+                                   activations=self.activations, activate_final=True)
         if self.use_shared_reward:
             self.hidden_to_rewards = nn.Dense(self.n_actions)
         else:
