@@ -16,7 +16,9 @@ def pop_arg(args, name):
 tmp_args, train_script_path = pop_arg(sys.argv[1:], 'train_script_path')
 tmp_args, exp_dir_path = pop_arg(tmp_args, 'exp_dir')
 tmp_args, seed = pop_arg(tmp_args, 'seed')
+seed = int(seed)
 exp_args, n_runs = pop_arg(tmp_args, 'n_runs')
+n_runs = int(n_runs)
 
 ps = []
 for run_ind in range(n_runs):
