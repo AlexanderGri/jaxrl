@@ -234,6 +234,8 @@ def main(_):
                                                   use_recurrent_policy=config.use_recurrent_policy,
                                                   save_replay=step_counter.check_key('replay'),
                                                   replay_prefix=f'step_{step_counter.total_steps}_')
+        if config.penalty_per_step is not None:
+            data = data._replace(rewards=(data.rewards - config.penalty_per_step))
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1

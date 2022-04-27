@@ -20,6 +20,8 @@ def get_config():
     config.use_recurrent_policy = True
     config.use_meta_rewards = True
 
+    config.penalty_per_step = 1.
+
     config.learner_kwargs = {
         'actor_lr': 3e-4,
         'critic_lr': 3e-4,
