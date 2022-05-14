@@ -153,7 +153,8 @@ class MetaPGLearner(object):
             return new_carry, actions
 
     def update_actor(self, data: PaddedTrajectoryData) -> InfoDict:
-        init_carry = self.initialize_carry(data)
+        n_trajectories, _, n_agents = data.actions.shape
+        init_carry = self.initialize_carry(n_trajectories, n_agents)
 
         new_rng, new_actor, actor_info = _update_actor_jit(
             self.rng, self.actor, self.intrinsic_critics, data,
@@ -169,7 +170,8 @@ class MetaPGLearner(object):
                             data: PaddedTrajectoryData, prev_actor: Model) -> InfoDict:
         if prev_data is None or prev_actor is None:
             return {}
-        init_carry = self.initialize_carry(data)
+        n_trajectories, _, n_agents = data.actions.shape
+        init_carry = self.initialize_carry(n_trajectories, n_agents)
 
         new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(
             self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
@@ -181,9 +183,8 @@ class MetaPGLearner(object):
         self.intrinsic_critics = new_intrinsic_critics
         return info
 
-    def initialize_carry(self, data: PaddedTrajectoryData):
+    def initialize_carry(self, n_trajectories, n_agents):
         if self.use_recurrent_policy:
-            n_trajectories, _, n_agents = data.actions.shape
             return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
         else:
             return None
