@@ -18,26 +18,26 @@ from jaxrl.networks.common import InfoDict, Model, PRNGKey, GRU
 
 
 @functools.partial(jax.jit, static_argnames=('use_recurrent_policy',))
-def _first_update_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
+def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
                 data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
                 use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[PRNGKey, Model, InfoDict]:
     rng, key = jax.random.split(rng)
-    new_actor, _ = update_intrinsic_actor(actor,
-                                          intrinsic_critics,
-                                          intrinsic_critics.params,
-                                          data, discount, entropy_coef,
-                                          mix_coef, use_recurrent_policy, init_carry)
+    new_actor, actor_info = update_intrinsic_actor(actor,
+                                                   intrinsic_critics,
+                                                   intrinsic_critics.params,
+                                                   data, discount, entropy_coef,
+                                                   mix_coef, use_recurrent_policy, init_carry)
 
-    return rng, new_actor, {}
+    return rng, new_actor, actor_info
 
 
 @functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy'))
-def _update_jit(rng: PRNGKey, prev_actor: Model, actor: Model, intrinsic_critics: Model,
-                extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
-                data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
-                length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) \
-        -> Tuple[PRNGKey, Model, Model, Model, InfoDict]:
+def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Model,
+                             extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
+                             data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
+                             length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) \
+        -> Tuple[PRNGKey, Model, Model, InfoDict]:
     rng, key = jax.random.split(rng)
     new_extrinsic_critic, extrinsic_critic_info = update_extrinsic_critic(extrinsic_critic,
                                                                           data,
@@ -60,18 +60,12 @@ def _update_jit(rng: PRNGKey, prev_actor: Model, actor: Model, intrinsic_critics
                                                                                  discount,
                                                                                  length,
                                                                                  mix_coef)
-    rng, key = jax.random.split(rng)
-    new_actor, actor_info = update_intrinsic_actor(actor,
-                                                   new_new_intrinsic_critics,
-                                                   new_new_intrinsic_critics.params,
-                                                   data, discount, entropy_coef,
-                                                   mix_coef, use_recurrent_policy, init_carry)
 
     info = {}
-    for d, name in zip([extrinsic_critic_info, reward_info, intrinsic_critics_info, actor_info],
-                       ['extrinsic', 'outer', 'intrinsic', 'inner']):
+    for d, name in zip([extrinsic_critic_info, reward_info, intrinsic_critics_info],
+                       ['extrinsic', 'outer', 'intrinsic']):
         info.update({f'{name}_{k}': v for k, v in d.items()})
-    return rng, new_actor, new_extrinsic_critic, new_new_intrinsic_critics, info
+    return rng, new_extrinsic_critic, new_new_intrinsic_critics, info
 
 
 class MetaPGLearner(object):
@@ -137,8 +131,6 @@ class MetaPGLearner(object):
         self.intrinsic_critics = intrinsic_critics
         self.rng = rng
 
-        self.step = 1
-
     def sample_actions(self,
                        observations: np.ndarray,
                        available_actions: np.ndarray,
@@ -160,41 +152,41 @@ class MetaPGLearner(object):
             actions = np.asarray(actions)
             return new_carry, actions
 
+    def update_actor(self, data: PaddedTrajectoryData) -> InfoDict:
+        init_carry = self.initialize_carry(data)
 
-    def update(self, data: PaddedTrajectoryData) -> InfoDict:
-        self.step += 1
-
-        if self.use_recurrent_policy:
-            n_trajectories, _, n_agents = data.actions.shape
-            init_carry = self.initialize_carry(n_trajectories, n_agents)
-        else:
-            init_carry = None
-
-        if self.step == 2:
-            new_rng, new_actor, info = _first_update_jit(
-                self.rng, self.actor, self.intrinsic_critics, data,
-                self.discount, self.entropy_coef, self.mix_coef,
-                self.use_recurrent_policy, init_carry)
-
-            new_extrinsic_critic = self.extrinsic_critic
-            new_intrinsic_critics = self.intrinsic_critics
-        else:
-            new_rng, new_actor, new_extrinsic_critic, new_intrinsic_critics, info = _update_jit(
-                self.rng, self.prev_actor, self.actor, self.intrinsic_critics, self.extrinsic_critic,
-                self.prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
-                self.use_recurrent_policy, init_carry)
+        new_rng, new_actor, actor_info = _update_actor_jit(
+            self.rng, self.actor, self.intrinsic_critics, data,
+            self.discount, self.entropy_coef, self.mix_coef,
+            self.use_recurrent_policy, init_carry)
 
         self.rng = new_rng
-        self.prev_actor = self.actor
         self.actor = new_actor
+
+        return {f'inner_{k}': v for k, v in actor_info.items()}
+
+    def update_except_actor(self, prev_data: PaddedTrajectoryData,
+                            data: PaddedTrajectoryData, prev_actor: Model) -> InfoDict:
+        if prev_data is None or prev_actor is None:
+            return {}
+        init_carry = self.initialize_carry(data)
+
+        new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(
+            self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
+            prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
+            self.use_recurrent_policy, init_carry)
+
+        self.rng = new_rng
         self.extrinsic_critic = new_extrinsic_critic
         self.intrinsic_critics = new_intrinsic_critics
-        self.prev_data = data
-
         return info
 
-    def initialize_carry(self, n_trajectories, n_agents):
-        return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
+    def initialize_carry(self, data: PaddedTrajectoryData):
+        if self.use_recurrent_policy:
+            n_trajectories, _, n_agents = data.actions.shape
+            return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
+        else:
+            return None
 
     def save(self, path):
         self.actor.save(f'{path}_actor')

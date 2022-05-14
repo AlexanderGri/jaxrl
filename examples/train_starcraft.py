@@ -228,6 +228,8 @@ def main(_):
     gt.reset_root()
     gt.rename_root('RL_algorithm')
     gt.set_def_unique(False)
+    prev_data = None
+    prev_actor = None
     while step_counter.total_steps < config.max_steps:
         data, rollout_info = collect_trajectories(env, agent,
                                                   n_trajectories=config.trajectories_per_update,
@@ -239,7 +241,11 @@ def main(_):
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
-        update_info = agent.update(data)
+        update_info = agent.update_except_actor(prev_data, data, prev_actor)
+        prev_actor = agent.actor
+        update_info_actor = agent.update_actor(data)
+        update_info.update(update_info_actor)
+        prev_data = data
         gt.stamp('train')
 
         if step_counter.check_key('log'):
