@@ -38,6 +38,7 @@ def get_config():
         'actor_hidden_dims': (128, 128)
     }
     config.meta_kwargs = {
+        'sampling_scheme': 'reuse',
         'mix_coef': 0.01,
         'use_shared_reward': False
     }

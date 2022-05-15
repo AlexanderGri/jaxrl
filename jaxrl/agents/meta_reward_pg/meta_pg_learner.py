@@ -32,11 +32,12 @@ def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
     return rng, new_actor, actor_info
 
 
-@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy'))
+@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme'))
 def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Model,
                              extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                              data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
-                             length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) \
+                             length: int, use_recurrent_policy: bool, sampling_scheme: str,
+                             init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[PRNGKey, Model, Model, InfoDict]:
     rng, key = jax.random.split(rng)
     new_extrinsic_critic, extrinsic_critic_info = update_extrinsic_critic(extrinsic_critic,
@@ -53,6 +54,7 @@ def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics:
                                                        entropy_coef,
                                                        mix_coef,
                                                        use_recurrent_policy,
+                                                       sampling_scheme,
                                                        init_carry)
     rng, key = jax.random.split(rng)
     new_new_intrinsic_critics, intrinsic_critics_info = update_intrinsic_critics(new_intrinsic_critics,
@@ -86,11 +88,13 @@ class MetaPGLearner(object):
                  use_shared_reward: bool = False,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,
-                 mix_coef: float = 0.01,):
+                 mix_coef: float = 0.01,
+                 sampling_scheme: str = 'reuse'):
 
         self.discount = discount
         self.entropy_coef = entropy_coef
         self.mix_coef = mix_coef
+        self.sampling_scheme = sampling_scheme
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
@@ -177,7 +181,7 @@ class MetaPGLearner(object):
         new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(
             self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
             prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
-            self.use_recurrent_policy, init_carry)
+            self.use_recurrent_policy, self.sampling_scheme, init_carry)
 
         self.rng = new_rng
         self.extrinsic_critic = new_extrinsic_critic

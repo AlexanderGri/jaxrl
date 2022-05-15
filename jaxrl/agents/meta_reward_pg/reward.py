@@ -14,7 +14,18 @@ from jaxrl.agents.meta_reward_pg.actor import get_actor_loss
 def update(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
            prev_data: PaddedTrajectoryData,
            data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-           use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
+           use_recurrent_policy: bool, sampling_scheme: str,
+           init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
+    if sampling_scheme == 'reuse':
+        outer_update_data = data
+        use_importance_sampling = False
+    elif sampling_scheme == 'importance_sampling':
+        outer_update_data = prev_data
+        use_importance_sampling = True
+    else:
+        outer_update_data = None
+        use_importance_sampling = None
+
     def reward_loss_fn(intrinsic_critics_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         actor, _ = update_intrinsic_actor(prev_actor, intrinsic_critics, intrinsic_critics_params,
                                           prev_data, discount, entropy_coef, mix_coef,
@@ -23,7 +34,7 @@ def update(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
         return get_actor_loss(actor, actor.params, values, next_values,
-                              data, rewards, discount, 0.,
-                              use_recurrent_policy, init_carry)
+                              outer_update_data, rewards, discount, 0.,
+                              use_recurrent_policy, use_importance_sampling, init_carry,)
     new_intrinsic_critics, info = intrinsic_critics.apply_gradient(reward_loss_fn)
     return new_intrinsic_critics, info

@@ -9,9 +9,10 @@ from jaxrl.networks.common import InfoDict, Model, Params
 from jaxrl.networks.critic_net import RewardAndCritics
 
 
+@functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_importance_sampling',))
 def get_actor_loss(actor: Model, actor_params, values: jnp.ndarray, next_values: jnp.ndarray,
                    data: PaddedTrajectoryData, rewards: jnp.ndarray, discount: float,
-                   entropy_coef: float, use_recurrent_policy: bool,
+                   entropy_coef: float, use_recurrent_policy: bool, use_importance_sampling: bool = False,
                    init_carry: Optional[jnp.ndarray] = None) -> Tuple[jnp.ndarray, InfoDict]:
     advantages = rewards + discount * next_values - values
 
@@ -22,7 +23,11 @@ def get_actor_loss(actor: Model, actor_params, values: jnp.ndarray, next_values:
         dist = actor.apply_fn({'params': actor_params},
                               data.observations, data.available_actions)
     log_probs = dist.log_prob(data.actions)
-    surrogate = advantages * log_probs
+    if use_importance_sampling:
+        old_log_probs = data.log_prob
+        surrogate = advantages * jnp.exp(log_probs - old_log_probs)
+    else:
+        surrogate = advantages * log_probs
     agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
     reward_loss = -(surrogate * agent_alive_normalized).sum()
     entropy = -(log_probs * agent_alive_normalized).sum()
