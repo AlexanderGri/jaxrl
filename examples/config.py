@@ -19,6 +19,7 @@ def get_config():
 
     config.use_recurrent_policy = True
     config.use_meta_rewards = True
+    config.one_hot_to_observations = False
 
     config.penalty_per_step = 0.0
 

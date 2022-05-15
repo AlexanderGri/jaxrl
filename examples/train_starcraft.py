@@ -30,7 +30,8 @@ InfoDict = dict
 
 def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearner],
                          n_trajectories: int = 1, save_replay: bool = False,
-                         replay_prefix: str = None, use_recurrent_policy: bool = False) \
+                         replay_prefix: str = None, use_recurrent_policy: bool = False,
+                         one_hot_to_observations: bool = False) \
         -> Tuple[PaddedTrajectoryData, InfoDict]:
     env.replay_prefix = replay_prefix
     env_info = env.get_env_info()
@@ -39,6 +40,8 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
     time_limit = env_info['episode_limit']
     n_actions = env_info['n_actions']
     n_agents = env_info['n_agents']
+    if one_hot_to_observations:
+        obs_dim += n_agents
 
     # per trajectory
     dones = np.zeros((n_trajectories,), dtype=bool)
@@ -72,7 +75,11 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
         while not done:
             ii = (traj_ind, step, ...)
             states[ii] = env.get_state()
-            observations[ii] = np.stack(env.get_obs())
+            env_obs = np.stack(env.get_obs())
+            if one_hot_to_observations:
+                observations[ii] = np.concatenate((env_obs, np.eye(n_agents)), axis=1)
+            else:
+                observations[ii] = env_obs
             available_actions[ii] = env.get_avail_actions()
             if use_recurrent_policy:
                 # adding two leading dimensions accounting for trajectories and steps
@@ -89,7 +96,11 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
             agent_alive[ii] = [env.get_unit_by_id(i).health > 0 for i in range(n_agents)]
             rewards[ii], done, step_info = env.step(actions[ii])
             next_states[ii] = env.get_state()
-            next_observations[ii] = np.stack(env.get_obs())
+            env_obs = np.stack(env.get_obs())
+            if one_hot_to_observations:
+                next_observations[ii] = np.concatenate((env_obs, np.eye(n_agents)), axis=1)
+            else:
+                next_observations[ii] = env_obs
             step += 1
             ret += rewards[ii]
         if step_info.get("episode_limit", False):
@@ -126,9 +137,10 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
 
 
 def evaluate(env: StarCraft2Env, agent: PGLearner, n_trajectories: int = 1,
-             use_recurrent_policy: bool = False) -> InfoDict:
+             use_recurrent_policy: bool = False, one_hot_to_observations: bool = False) -> InfoDict:
     returns = []
     total_steps = 0
+    n_agents = env.get_env_info()['n_agents']
     end_info = {"dead_allies": [],
                 "dead_enemies": [],
                 "battle_won": []}
@@ -141,7 +153,12 @@ def evaluate(env: StarCraft2Env, agent: PGLearner, n_trajectories: int = 1,
             carry = agent.initialize_carry(1, env.get_env_info()['n_agents'])
         while not done:
             # adding two leading dimensions accounting for trajectories and steps
-            observations = np.stack(env.get_obs())[np.newaxis, np.newaxis]
+            env_obs = np.stack(env.get_obs())
+            if one_hot_to_observations:
+                cur_obs = np.concatenate((env_obs, np.eye(n_agents)), axis=1)
+            else:
+                cur_obs = env_obs
+            observations = cur_obs[np.newaxis, np.newaxis]
             available_actions = np.stack(env.get_avail_actions())[np.newaxis, np.newaxis]
             if use_recurrent_policy:
                 carry, actions, _ = agent.sample_actions(
@@ -202,7 +219,11 @@ def main(_):
 
     env_info = env.get_env_info()
     dummy_states_batch = np.ones((1, 1, env_info['state_shape']))
-    dummy_observations_batch = np.ones((1, 1, 1, env_info['obs_shape']))
+    if FLAGS.config.one_hot_to_observations:
+        obs_shape = env_info['obs_shape'] + env_info['n_agents']
+    else:
+        obs_shape = env_info['obs_shape']
+    dummy_observations_batch = np.ones((1, 1, 1, obs_shape))
     dummy_available_actions_batch = np.zeros((1, 1, 1, env_info["n_actions"],), dtype=bool)
 
     np.random.seed(config.seed)
@@ -238,7 +259,8 @@ def main(_):
                                                   n_trajectories=config.trajectories_per_update,
                                                   use_recurrent_policy=config.use_recurrent_policy,
                                                   save_replay=step_counter.check_key('replay'),
-                                                  replay_prefix=f'step_{step_counter.total_steps}_')
+                                                  replay_prefix=f'step_{step_counter.total_steps}_',
+                                                  one_hot_to_observations=FLAGS.config.one_hot_to_observations)
         if config.penalty_per_step is not None:
             data = data._replace(rewards=(data.rewards - config.penalty_per_step))
         gt.stamp('collect_data')
@@ -268,7 +290,8 @@ def main(_):
         if step_counter.check_key('eval'):
             eval_info = evaluate(env, agent,
                                  n_trajectories=config.eval_episodes,
-                                 use_recurrent_policy=config.use_recurrent_policy)
+                                 use_recurrent_policy=config.use_recurrent_policy,
+                                 one_hot_to_observations=FLAGS.config.one_hot_to_observations)
             for k, v in eval_info.items():
                 summary_writer.add_scalar(f'eval/{k}', v, it)
             gt.stamp('eval')
