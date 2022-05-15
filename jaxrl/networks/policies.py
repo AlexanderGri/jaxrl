@@ -215,14 +215,16 @@ def _sample_constrained_actions(
         observations: np.ndarray,
         available_actions: np.ndarray,
         temperature: float = 1.0,
-        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray]:
+        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray, jnp.ndarray]:
     dist = actor_apply_fn({'params': actor_params}, observations,
                           available_actions, temperature)
     if distribution == 'det':
-        return rng, dist.logits.argmax(axis=-1)
+        sample = dist.logits.argmax(axis=-1)
     else:
         rng, key = jax.random.split(rng)
-        return rng, dist.sample(seed=key)
+        sample = dist.sample(seed=key)
+    log_prob = dist.log_prob(sample)
+    return rng, sample, log_prob
 
 
 @functools.partial(jax.jit, static_argnames=('actor_apply_fn', 'distribution'))
@@ -234,15 +236,17 @@ def _sample_constrained_actions_recurrent(
         observations: np.ndarray,
         available_actions: np.ndarray,
         temperature: float = 1.0,
-        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray, jnp.ndarray]:
+        distribution: str = 'log_prob') -> Tuple[PRNGKey, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     new_carry, dist = actor_apply_fn({'params': actor_params},
                                      carry, observations,
                                      available_actions, temperature)
     if distribution == 'det':
-        return rng, new_carry, dist.logits.argmax(axis=-1)
+        sample = dist.logits.argmax(axis=-1)
     else:
         rng, key = jax.random.split(rng)
-        return rng, new_carry, dist.sample(seed=key)
+        sample = dist.sample(seed=key)
+    log_prob = dist.log_prob(sample)
+    return rng, new_carry, sample, log_prob
 
 
 def sample_constrained_actions(
@@ -254,7 +258,7 @@ def sample_constrained_actions(
         carry: Optional[jnp.ndarray] = None,
         temperature: float = 1.0,
         distribution: str = 'log_prob') \
-        -> Union[Tuple[PRNGKey, jnp.ndarray], Tuple[PRNGKey, jnp.ndarray, jnp.ndarray]]:
+        -> Union[Tuple[PRNGKey, jnp.ndarray, jnp.ndarray], Tuple[PRNGKey, jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
     if carry is None:
         return _sample_constrained_actions(rng, actor_apply_fn, actor_params, observations,
                                            available_actions, temperature, distribution)

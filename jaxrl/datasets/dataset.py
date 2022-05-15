@@ -11,7 +11,7 @@ Batch = collections.namedtuple(
 
 PaddedTrajectoryData = collections.namedtuple(
     'PaddedTrajectoryData',
-    ['states', 'observations', 'next_states', 'next_observations', 'actions',
+    ['states', 'observations', 'next_states', 'next_observations', 'actions', 'log_prob',
      'available_actions', 'rewards', 'all_agents_alive', 'agent_alive', 'dones', 'length'])
 
 

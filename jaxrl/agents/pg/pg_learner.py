@@ -114,21 +114,22 @@ class PGLearner(object):
                        available_actions: np.ndarray,
                        carry: Optional[jnp.ndarray] = None,
                        temperature: float = 1.0,
-                       distribution: str = 'log_prob') -> Union[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray]]:
+                       distribution: str = 'log_prob') -> \
+            Union[Tuple[jnp.ndarray, jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
         outputs = policies.sample_constrained_actions(self.rng, self.actor.apply_fn,
                                                       self.actor.params, observations,
                                                       available_actions, carry,
                                                       temperature, distribution)
         if carry is None:
-            rng, actions = outputs
+            rng, actions, log_prob = outputs
             self.rng = rng
             actions = np.asarray(actions)
-            return actions
+            return actions, log_prob
         else:
-            rng, new_carry, actions = outputs
+            rng, new_carry, actions, log_prob = outputs
             self.rng = rng
             actions = np.asarray(actions)
-            return new_carry, actions
+            return new_carry, actions, log_prob
 
     def update(self, data: PaddedTrajectoryData) -> InfoDict:
         self.step += 1

@@ -51,6 +51,7 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
     observations = np.zeros((n_trajectories, time_limit, n_agents, obs_dim))
     next_observations = np.zeros((n_trajectories, time_limit, n_agents, obs_dim))
     actions = np.zeros((n_trajectories, time_limit, n_agents), dtype=int)
+    log_prob = np.zeros((n_trajectories, time_limit, n_agents))
     available_actions = np.zeros((n_trajectories, time_limit, n_agents, n_actions), dtype=bool)
     agent_alive = np.zeros((n_trajectories, time_limit, n_agents), dtype=bool)
 
@@ -75,14 +76,15 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
             available_actions[ii] = env.get_avail_actions()
             if use_recurrent_policy:
                 # adding two leading dimensions accounting for trajectories and steps
-                carry, cur_actions = agent.sample_actions(
+                carry, cur_actions, cur_log_prob = agent.sample_actions(
                     observations[ii][np.newaxis, np.newaxis],
                     available_actions[ii][np.newaxis, np.newaxis],
                     carry)
                 actions[ii] = cur_actions[0, 0]
+                log_prob[ii] = cur_log_prob[0, 0]
             else:
-                actions[ii] = agent.sample_actions(observations[ii],
-                                                   available_actions[ii])
+                actions[ii], log_prob[ii] = agent.sample_actions(observations[ii],
+                                                                 available_actions[ii])
             all_agents_alive[ii] = True
             agent_alive[ii] = [env.get_unit_by_id(i).health > 0 for i in range(n_agents)]
             rewards[ii], done, step_info = env.step(actions[ii])
@@ -105,6 +107,7 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
         next_states=next_states,
         next_observations=next_observations,
         actions=actions,
+        log_prob=log_prob,
         available_actions=available_actions,
         rewards=rewards,
         all_agents_alive=all_agents_alive,
@@ -141,15 +144,15 @@ def evaluate(env: StarCraft2Env, agent: PGLearner, n_trajectories: int = 1,
             observations = np.stack(env.get_obs())[np.newaxis, np.newaxis]
             available_actions = np.stack(env.get_avail_actions())[np.newaxis, np.newaxis]
             if use_recurrent_policy:
-                carry, actions = agent.sample_actions(
+                carry, actions, _ = agent.sample_actions(
                     observations,
                     available_actions,
                     carry,
                     distribution='det')
             else:
-                actions = agent.sample_actions(observations,
-                                               available_actions,
-                                               distribution='det')
+                actions, _ = agent.sample_actions(observations,
+                                                  available_actions,
+                                                  distribution='det')
             actions = actions[0, 0]
             reward, done, step_info = env.step(actions)
             step += 1
