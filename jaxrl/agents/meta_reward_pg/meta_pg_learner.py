@@ -89,15 +89,20 @@ class MetaPGLearner(object):
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01,
-                 sampling_scheme: str = 'reuse'):
+                 sampling_scheme: str = 'reuse',
+                 mimic_sgd: bool = False):
 
         self.discount = discount
         self.entropy_coef = entropy_coef
         self.mix_coef = mix_coef
         self.sampling_scheme = sampling_scheme
+        self.actor_lr = actor_lr
+        self.mimic_sgd = mimic_sgd
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
+
+        assert (not mimic_sgd) or (mimic_sgd and sampling_scheme == 'importance_sampling')
 
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, extrinsic_critic_key, intrinsic_critics_key = jax.random.split(rng, 4)
@@ -177,6 +182,11 @@ class MetaPGLearner(object):
             return {}
         n_trajectories, _, n_agents = data.actions.shape
         init_carry = self.initialize_carry(n_trajectories, n_agents)
+
+        if self.mimic_sgd:
+            tx = optax.sgd(learning_rate=self.actor_lr)
+            opt_state = tx.init(prev_actor.params)
+            prev_actor = prev_actor.replace(tx=tx, opt_state=opt_state)
 
         new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(
             self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
