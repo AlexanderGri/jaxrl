@@ -48,7 +48,7 @@ def update_extrinsic(actor: Model, extrinsic_critic: Model, data: PaddedTrajecto
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, values, next_values,
                               data, rewards, discount, entropy_coef,
-                              use_recurrent_policy, init_carry)
+                              use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)
     return new_actor, info
@@ -75,7 +75,7 @@ def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_p
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, values, next_values,
                               data, mixed_rewards, discount, entropy_coef,
-                              use_recurrent_policy, init_carry)
+                              use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)
     for arr, reward_type in zip([meta_rewards, data.rewards, mixed_rewards],
