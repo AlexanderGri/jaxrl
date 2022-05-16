@@ -266,11 +266,14 @@ def main(_):
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
-        update_info = agent.update_except_actor(prev_data, data, prev_actor)
-        prev_actor = agent.actor
-        update_info_actor = agent.update_actor(data)
-        update_info.update(update_info_actor)
-        prev_data = data
+        if config.use_meta_rewards:
+            update_info = agent.update_except_actor(prev_data, data, prev_actor)
+            prev_actor = agent.actor
+            update_info_actor = agent.update_actor(data)
+            update_info.update(update_info_actor)
+            prev_data = data
+        else:
+            update_info = agent.update(data)
         gt.stamp('train')
 
         if step_counter.check_key('log'):
