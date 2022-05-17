@@ -215,7 +215,8 @@ def main(_):
     else:
         replay_dir = None
 
-    env = StarCraft2Env(map_name=config.map_name, replay_dir=replay_dir)
+    env = StarCraft2Env(map_name=config.map_name, replay_dir=replay_dir,
+                        reward_only_positive=FLAGS.config.reward_only_positive)
 
     env_info = env.get_env_info()
     dummy_states_batch = np.ones((1, 1, env_info['state_shape']))

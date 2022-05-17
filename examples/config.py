@@ -14,6 +14,7 @@ def get_config():
     config.save_replay = True
 
     config.map_name = '2s3z'
+    config.reward_only_positive = True
     config.seed = 45
     config.trajectories_per_update = 1
 
