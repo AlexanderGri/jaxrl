@@ -30,7 +30,7 @@ def get_actor_loss(actor: Model, actor_params, values: jnp.ndarray, next_values:
         surrogate = advantages * log_probs
     agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
     reward_loss = -(surrogate * agent_alive_normalized).sum()
-    entropy = -(log_probs * agent_alive_normalized).sum()
+    entropy = -(dist.entropy() * agent_alive_normalized).sum()
     actor_loss = reward_loss - entropy_coef * entropy
     return actor_loss, {
         'reward_loss': reward_loss,
