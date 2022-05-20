@@ -20,7 +20,7 @@ def update(actor: Model, critic: Model, data: PaddedTrajectoryData,
         padded_surrogate = padded_advantages_expanded * padded_log_probs
         agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
         reward_loss = -(padded_surrogate * agent_alive_normalized).sum()
-        entropy = -(dist.entropy() * agent_alive_normalized).sum()
+        entropy = (dist.entropy() * agent_alive_normalized).sum()
         actor_loss = reward_loss - entropy_coef * entropy
         return actor_loss, {
             'reward_loss': reward_loss,
@@ -47,7 +47,7 @@ def update_recurrent(actor: Model, critic: Model, data: PaddedTrajectoryData,
         padded_surrogate = padded_advantages_expanded * padded_log_probs
         agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
         reward_loss = -(padded_surrogate * agent_alive_normalized).sum()
-        entropy = -(dist.entropy() * agent_alive_normalized).sum()
+        entropy = (dist.entropy() * agent_alive_normalized).sum()
         actor_loss = reward_loss - entropy_coef * entropy
         return actor_loss, {
             'reward_loss': reward_loss,
