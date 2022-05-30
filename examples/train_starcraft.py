@@ -266,7 +266,6 @@ def main(_):
                                                   save_replay=step_counter.check_key('replay'),
                                                   replay_prefix=f'step_{step_counter.total_steps}_',
                                                   one_hot_to_observations=FLAGS.config.one_hot_to_observations)
-        print(rollout_info['returns'])
         if config.penalty_per_step is not None:
             data = data._replace(rewards=(data.rewards - config.penalty_per_step))
         gt.stamp('collect_data')
