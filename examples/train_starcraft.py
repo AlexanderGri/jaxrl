@@ -205,6 +205,7 @@ def main(_):
     if config.use_meta_rewards:
         if not config.meta_kwargs.no_rewards_in_meta:
             config.learner_kwargs.update(config.meta_kwargs)
+            delattr(config.learner_kwargs, 'no_rewards_in_meta')
     FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
 
     summary_writer = SummaryWriter(os.path.join(config.save_dir, 'tb'))
