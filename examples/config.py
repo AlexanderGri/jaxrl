@@ -43,7 +43,8 @@ def get_config():
         'mimic_sgd': False,
         'sampling_scheme': 'reuse',
         'mix_coef': 0.01,
-        'use_shared_reward': False
+        'use_shared_reward': False,
+        'no_rewards_in_meta': False
     }
 
     return config

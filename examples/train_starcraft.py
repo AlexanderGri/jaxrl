@@ -13,7 +13,7 @@ from ml_collections import config_flags
 from jax import numpy as jnp
 from tensorboardX import SummaryWriter
 
-from jaxrl.agents import PGLearner, MetaPGLearner
+from jaxrl.agents import PGLearner, MetaPGLearner, MetaNoRewardPGLearner
 from jaxrl.datasets import PaddedTrajectoryData
 from jaxrl.utils import StepCounter
 from smac.env import StarCraft2Env
@@ -203,7 +203,8 @@ def main(_):
         config.learner_kwargs.update(config.policy_kwargs)
         config.learner_kwargs.use_recurrent_policy = False
     if config.use_meta_rewards:
-        config.learner_kwargs.update(config.meta_kwargs)
+        if not config.meta_kwargs.no_rewards_in_meta:
+            config.learner_kwargs.update(config.meta_kwargs)
     FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
 
     summary_writer = SummaryWriter(os.path.join(config.save_dir, 'tb'))
@@ -233,8 +234,11 @@ def main(_):
 
     learner_kwargs = dict(config.learner_kwargs)
     if config.use_meta_rewards:
-        Learner = MetaPGLearner
-        learner_kwargs["n_agents"] = env_info["n_agents"]
+        if config.meta_kwargs.no_rewards_in_meta:
+            Learner = MetaNoRewardPGLearner
+        else:
+            Learner = MetaPGLearner
+            learner_kwargs["n_agents"] = env_info["n_agents"]
     else:
         Learner = PGLearner
 
@@ -262,17 +266,22 @@ def main(_):
                                                   save_replay=step_counter.check_key('replay'),
                                                   replay_prefix=f'step_{step_counter.total_steps}_',
                                                   one_hot_to_observations=FLAGS.config.one_hot_to_observations)
+        print(rollout_info['returns'])
         if config.penalty_per_step is not None:
             data = data._replace(rewards=(data.rewards - config.penalty_per_step))
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
         if config.use_meta_rewards:
-            update_info = agent.update_except_actor(prev_data, data, prev_actor)
-            prev_actor = agent.actor
-            update_info_actor = agent.update_actor(data)
-            update_info.update(update_info_actor)
-            prev_data = data
+            if config.meta_kwargs.no_rewards_in_meta:
+                update_info = agent.update(prev_data, data)
+                prev_data = data
+            else:
+                update_info = agent.update_except_actor(prev_data, data, prev_actor)
+                prev_actor = agent.actor
+                update_info_actor = agent.update_actor(data)
+                update_info.update(update_info_actor)
+                prev_data = data
         else:
             update_info = agent.update(data)
         gt.stamp('train')
