@@ -208,3 +208,8 @@ class MetaPGLearner(object):
         self.actor.save(f'{path}_actor')
         self.intrinsic_critics.save(f'{path}_intrinsic_critics')
         self.extrinsic_critic.save(f'{path}_extrinsic_critic')
+
+    def load(self, path):
+        self.actor.load(f'{path}_actor')
+        self.intrinsic_critics.load(f'{path}_intrinsic_critics')
+        self.extrinsic_critic.load(f'{path}_extrinsic_critic')

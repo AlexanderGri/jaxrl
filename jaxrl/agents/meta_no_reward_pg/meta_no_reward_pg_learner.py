@@ -158,3 +158,7 @@ class MetaNoRewardPGLearner(object):
     def save(self, path):
         self.actor.save(f'{path}_actor')
         self.critic.save(f'{path}_critic')
+
+    def load(self, path):
+        self.actor.load(f'{path}_actor')
+        self.critic.load(f'{path}_critic')
