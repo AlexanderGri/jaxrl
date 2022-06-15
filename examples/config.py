@@ -42,6 +42,7 @@ def get_config():
     config.meta_kwargs = {
         'mimic_sgd': False,
         'sampling_scheme': 'reuse',
+        'acc_intrinsic_grads': False,
         'mix_coef': 0.01,
         'use_shared_reward': False,
         'no_rewards_in_meta': False

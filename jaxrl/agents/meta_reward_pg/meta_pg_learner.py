@@ -5,13 +5,14 @@ from typing import Optional, Sequence, Tuple, Union
 
 import jax
 import jax.numpy as jnp
+from jax.tree_util import tree_map
 import numpy as np
 import optax
 
 from jaxrl.agents.meta_reward_pg.actor import update_intrinsic as update_intrinsic_actor
-from jaxrl.agents.meta_reward_pg.critic import update_intrinsic as update_intrinsic_critics
+from jaxrl.agents.meta_reward_pg.critic import get_grad_intrinsic as get_grad_instrinsic_critic
 from jaxrl.agents.meta_reward_pg.critic import update_extrinsic as update_extrinsic_critic
-from jaxrl.agents.meta_reward_pg.reward import update as update_reward
+from jaxrl.agents.meta_reward_pg.reward import get_grad as get_grad_reward
 from jaxrl.datasets import PaddedTrajectoryData
 from jaxrl.networks import critic_net, policies
 from jaxrl.networks.common import InfoDict, Model, PRNGKey, GRU
@@ -32,11 +33,11 @@ def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
     return rng, new_actor, actor_info
 
 
-@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme'))
+@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme', 'acc_intrinsic_grads'))
 def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Model,
                              extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                              data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
-                             length: int, use_recurrent_policy: bool, sampling_scheme: str,
+                             length: int, use_recurrent_policy: bool, sampling_scheme: str, acc_intrinsic_grads: bool,
                              init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[PRNGKey, Model, Model, InfoDict]:
     rng, key = jax.random.split(rng)
@@ -45,23 +46,33 @@ def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics:
                                                                           discount,
                                                                           length)
     rng, key = jax.random.split(rng)
-    new_intrinsic_critics, reward_info = update_reward(prev_actor,
-                                                       intrinsic_critics,
-                                                       new_extrinsic_critic,
-                                                       prev_data,
-                                                       data,
-                                                       discount,
-                                                       entropy_coef,
-                                                       mix_coef,
-                                                       use_recurrent_policy,
-                                                       sampling_scheme,
-                                                       init_carry)
+    grad_reward, reward_info = get_grad_reward(prev_actor,
+                                               intrinsic_critics,
+                                               new_extrinsic_critic,
+                                               prev_data,
+                                               data,
+                                               discount,
+                                               entropy_coef,
+                                               mix_coef,
+                                               use_recurrent_policy,
+                                               sampling_scheme,
+                                               init_carry)
+    if acc_intrinsic_grads:
+        new_intrinsic_critics = intrinsic_critics
+    else:
+        new_intrinsic_critics = intrinsic_critics.apply_gradient(grads=grad_reward, has_aux=False)
+
     rng, key = jax.random.split(rng)
-    new_new_intrinsic_critics, intrinsic_critics_info = update_intrinsic_critics(new_intrinsic_critics,
-                                                                                 data,
-                                                                                 discount,
-                                                                                 length,
-                                                                                 mix_coef)
+    intrinsic_critic_grad, intrinsic_critics_info = get_grad_instrinsic_critic(new_intrinsic_critics,
+                                                                               data,
+                                                                               discount,
+                                                                               length,
+                                                                               mix_coef)
+    if acc_intrinsic_grads:
+        full_grad = tree_map(lambda pt1, pt2: pt1 + pt2, grad_reward, intrinsic_critic_grad)
+        new_new_intrinsic_critics = new_intrinsic_critics.apply_gradient(grads=full_grad, has_aux=False)
+    else:
+        new_new_intrinsic_critics = new_intrinsic_critics.apply_gradient(grads=intrinsic_critic_grad, has_aux=False)
 
     info = {}
     for d, name in zip([extrinsic_critic_info, reward_info, intrinsic_critics_info],
@@ -90,12 +101,14 @@ class MetaPGLearner(object):
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01,
                  sampling_scheme: str = 'reuse',
+                 acc_intrinsic_grads: bool = False,
                  mimic_sgd: bool = False):
 
         self.discount = discount
         self.entropy_coef = entropy_coef
         self.mix_coef = mix_coef
         self.sampling_scheme = sampling_scheme
+        self.acc_intrinsic_grads = acc_intrinsic_grads
         self.actor_lr = actor_lr
         self.mimic_sgd = mimic_sgd
         self.length = length
@@ -191,7 +204,7 @@ class MetaPGLearner(object):
         new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(
             self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
             prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
-            self.use_recurrent_policy, self.sampling_scheme, init_carry)
+            self.use_recurrent_policy, self.sampling_scheme, self.acc_intrinsic_grads, init_carry)
 
         self.rng = new_rng
         self.extrinsic_critic = new_extrinsic_critic

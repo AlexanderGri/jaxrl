@@ -11,11 +11,11 @@ from jaxrl.agents.meta_reward_pg.actor import update_intrinsic as update_intrins
 from jaxrl.agents.meta_reward_pg.actor import get_actor_loss
 
 # @functools.partial(jax.jit, static_argnames=('use_recurrent_policy',))
-def update(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
-           prev_data: PaddedTrajectoryData,
-           data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-           use_recurrent_policy: bool, sampling_scheme: str,
-           init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
+def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
+             prev_data: PaddedTrajectoryData,
+             data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
+             use_recurrent_policy: bool, sampling_scheme: str,
+             init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
     if sampling_scheme == 'reuse':
         outer_update_data = data
         use_importance_sampling = False
@@ -36,5 +36,6 @@ def update(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
         return get_actor_loss(actor, actor.params, values, next_values,
                               outer_update_data, rewards, discount, 0.,
                               use_recurrent_policy, use_importance_sampling, init_carry,)
-    new_intrinsic_critics, info = intrinsic_critics.apply_gradient(reward_loss_fn)
-    return new_intrinsic_critics, info
+
+    (_, info), grad = jax.value_and_grad(reward_loss_fn, has_aux=True)(intrinsic_critics.params)
+    return grad, info

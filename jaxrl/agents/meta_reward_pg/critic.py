@@ -50,8 +50,8 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
     return new_critic, info
 
 
-def update_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
-                     discount: float, length: int, mix_coef: float) -> Tuple[Model, InfoDict]:
+def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
+                       discount: float, length: int, mix_coef: float) -> Tuple[Model, InfoDict]:
     last_values = intrinsic_critics(data.next_states[:, -1], method=RewardAndCritics.get_values)
     all_meta_rewards = intrinsic_critics(data.states, method=RewardAndCritics.get_rewards)
     indices = (*jnp.indices(data.actions.shape), data.actions)
@@ -77,6 +77,6 @@ def update_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
             **{f'v{i}': mean_v for i, mean_v in enumerate(mean_values_per_agent)}
         }
 
-    new_critic, info = intrinsic_critics.apply_gradient(critic_loss_fn)
+    (_, info), grad = jax.value_and_grad(critic_loss_fn, has_aux=True)(intrinsic_critics.params)
 
-    return new_critic, info
+    return grad, info
