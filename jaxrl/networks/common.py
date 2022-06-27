@@ -21,6 +21,21 @@ Dtype = Any  # this could be a real type?
 InfoDict = Dict[str, float]
 
 
+class Recurrent(nn.Module):
+    hidden_dims: Sequence[int]
+    recurrent_hidden_dim: int
+    n_actions: int
+
+    @nn.compact
+    def __call__(self,
+                 carry: jnp.ndarray,
+                 observations: jnp.ndarray,):
+        inputs = MLP(self.hidden_dims, activate_final=True)(observations)
+        new_carry, hiddens = GRU()(carry, inputs)
+        outputs = nn.Dense(self.n_actions)(hiddens)
+        return new_carry, outputs
+
+
 class GRU(nn.Module):
 
     @functools.partial(

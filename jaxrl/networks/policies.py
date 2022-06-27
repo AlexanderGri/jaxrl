@@ -10,7 +10,7 @@ from tensorflow_probability.substrates import jax as tfp
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-from jaxrl.networks.common import MLP, GRU, Params, PRNGKey, default_init
+from jaxrl.networks.common import MLP, Params, PRNGKey, default_init, Recurrent
 
 LOG_STD_MIN = -10.0
 LOG_STD_MAX = 2.0
@@ -27,15 +27,15 @@ class RecurrentConstrainedCategoricalPolicy(nn.Module):
                  carry: jnp.ndarray,
                  observations: jnp.ndarray,
                  available_actions: jnp.ndarray,
-                 temperature: float = 1.0,
-                 training: bool = False):
-        inputs = MLP(self.hidden_dims, activate_final=True)(observations)
+                 temperature: float = 1.0,):
+        backbone = Recurrent(self.hidden_dims,
+                             self.recurrent_hidden_dim,
+                             self.n_actions)
         # time dimension should be third
         # traj x time x agent x dim -> traj x agent x time x dim
-        transposed_inputs = inputs.transpose((0, 2, 1, 3))
-        new_carry, transposed_outputs = GRU()(carry, transposed_inputs)
-        outputs = transposed_outputs.transpose((0, 2, 1, 3))
-        logits = nn.Dense(self.n_actions)(outputs)
+        inputs = observations.transpose((0, 2, 1, 3))
+        new_carry, outputs = backbone(carry, inputs)
+        logits = outputs.transpose((0, 2, 1, 3))
         # set logits of unavailable actions to -inf
         masked_logits = jnp.where(available_actions, logits, IMPOSSIBLE_ACTION_LOGIT)
         base_dist = tfd.Categorical(logits=masked_logits)
