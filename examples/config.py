@@ -45,6 +45,7 @@ def get_config():
         'acc_intrinsic_grads': False,
         'mix_coef': 0.01,
         'use_shared_reward': False,
+        'use_shared_value': False,
         'no_rewards_in_meta': False
     }
 

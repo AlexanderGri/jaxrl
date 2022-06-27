@@ -97,6 +97,7 @@ class MetaPGLearner(object):
                  actor_recurrent_hidden_dim: int = 64,
                  use_recurrent_policy: bool = True,
                  use_shared_reward: bool = False,
+                 use_shared_value: bool = False,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01,
@@ -116,6 +117,7 @@ class MetaPGLearner(object):
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
 
         assert (not mimic_sgd) or (mimic_sgd and sampling_scheme == 'importance_sampling')
+        assert use_shared_reward or not use_shared_value
 
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, extrinsic_critic_key, intrinsic_critics_key = jax.random.split(rng, 4)
@@ -141,7 +143,7 @@ class MetaPGLearner(object):
                                         inputs=[extrinsic_critic_key, states],
                                         tx=optax.adam(learning_rate=critic_lr))
         intrinsic_critic_def = critic_net.RewardAndCritics(critic_hidden_dims, n_agents, n_actions,
-                                                           use_shared_reward)
+                                                           use_shared_reward, use_shared_value)
         intrinsic_critics = Model.create(intrinsic_critic_def,
                                          inputs=[intrinsic_critics_key, states],
                                          tx=optax.adam(learning_rate=critic_lr))
