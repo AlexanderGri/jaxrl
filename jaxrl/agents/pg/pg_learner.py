@@ -70,6 +70,7 @@ class PGLearner(object):
                  actor_hidden_dims: Sequence[int] = (64,),
                  actor_recurrent_hidden_dim: int = 64,
                  use_recurrent_policy: bool = True,
+                 use_shared_policy: bool = True,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3):
 
@@ -79,19 +80,23 @@ class PGLearner(object):
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
 
+        _, _, n_agents, _ = observations.shape
+
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, critic_key = jax.random.split(rng, 3)
         if self.use_recurrent_policy:
             actor_def = policies.RecurrentConstrainedCategoricalPolicy(
                 hidden_dims=actor_hidden_dims,
                 recurrent_hidden_dim=actor_recurrent_hidden_dim,
-                n_actions=n_actions, )
-            carry = self.initialize_carry(1, 1)
+                n_actions=n_actions,
+                shared=use_shared_policy)
+            carry = self.initialize_carry(1, n_agents)
             inputs = [actor_key, carry, observations, available_actions]
         else:
             actor_def = policies.ConstrainedCategoricalPolicy(
                 hidden_dims=actor_hidden_dims,
-                n_actions=n_actions,)
+                n_actions=n_actions,
+                shared=use_shared_policy)
             inputs = [actor_key, observations, available_actions]
 
         actor = Model.create(actor_def,
