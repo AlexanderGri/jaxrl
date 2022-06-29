@@ -41,7 +41,7 @@ class GRU(nn.Module):
     @functools.partial(
         nn.transforms.scan,
         variable_broadcast='params',
-        in_axes=2, out_axes=2,
+        in_axes=1, out_axes=1,
         split_rngs={'params': False})
     @nn.compact
     def __call__(self, carry: jnp.ndarray, x: jnp.ndarray):

@@ -98,6 +98,7 @@ class MetaPGLearner(object):
                  use_recurrent_policy: bool = True,
                  use_shared_reward: bool = False,
                  use_shared_value: bool = False,
+                 use_shared_policy: bool = True,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01,
@@ -125,15 +126,16 @@ class MetaPGLearner(object):
             actor_def = policies.RecurrentConstrainedCategoricalPolicy(
                 hidden_dims=actor_hidden_dims,
                 recurrent_hidden_dim=actor_recurrent_hidden_dim,
-                n_actions=n_actions, )
-            carry = self.initialize_carry(1, 1)
+                n_actions=n_actions,
+                shared=use_shared_policy)
+            carry = self.initialize_carry(1, n_agents)
             inputs = [actor_key, carry, observations, available_actions]
         else:
             actor_def = policies.ConstrainedCategoricalPolicy(
                 hidden_dims=actor_hidden_dims,
-                n_actions=n_actions,)
+                n_actions=n_actions,
+                shared=use_shared_policy)
             inputs = [actor_key, observations, available_actions]
-
         actor = Model.create(actor_def,
                              inputs=inputs,
                              tx=optax.adam(learning_rate=actor_lr, eps_root=1e-8))

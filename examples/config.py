@@ -29,7 +29,8 @@ def get_config():
         'critic_lr': 3e-4,
         'critic_hidden_dims': (128, 128),
         'discount': 0.99,
-        'entropy_coef': 1e-3
+        'entropy_coef': 1e-3,
+        'use_shared_policy': True,
     }
 
     config.recurrent_policy_kwargs = {

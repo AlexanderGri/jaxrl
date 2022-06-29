@@ -87,11 +87,11 @@ def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearn
                     observations[ii][np.newaxis, np.newaxis],
                     available_actions[ii][np.newaxis, np.newaxis],
                     carry)
-                actions[ii] = cur_actions[0, 0]
-                log_prob[ii] = cur_log_prob[0, 0]
             else:
-                actions[ii], log_prob[ii] = agent.sample_actions(observations[ii],
-                                                                 available_actions[ii])
+                cur_actions, cur_log_prob = agent.sample_actions(observations[ii][np.newaxis, np.newaxis],
+                                                                 available_actions[ii][np.newaxis, np.newaxis])
+            actions[ii] = cur_actions[0, 0]
+            log_prob[ii] = cur_log_prob[0, 0]
             all_agents_alive[ii] = True
             agent_alive[ii] = [env.get_unit_by_id(i).health > 0 for i in range(n_agents)]
             rewards[ii], done, step_info = env.step(actions[ii])
@@ -226,8 +226,8 @@ def main(_):
         obs_shape = env_info['obs_shape'] + env_info['n_agents']
     else:
         obs_shape = env_info['obs_shape']
-    dummy_observations_batch = np.ones((1, 1, 1, obs_shape))
-    dummy_available_actions_batch = np.zeros((1, 1, 1, env_info["n_actions"],), dtype=bool)
+    dummy_observations_batch = np.ones((1, 1, env_info['n_agents'], obs_shape))
+    dummy_available_actions_batch = np.zeros((1, 1, env_info['n_agents'], env_info["n_actions"],), dtype=bool)
 
     np.random.seed(config.seed)
     random.seed(config.seed)

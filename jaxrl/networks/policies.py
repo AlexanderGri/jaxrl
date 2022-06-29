@@ -21,6 +21,7 @@ class RecurrentConstrainedCategoricalPolicy(nn.Module):
     hidden_dims: Sequence[int]
     recurrent_hidden_dim: int
     n_actions: int
+    shared: bool
 
     @nn.compact
     def __call__(self,
@@ -28,15 +29,21 @@ class RecurrentConstrainedCategoricalPolicy(nn.Module):
                  observations: jnp.ndarray,
                  available_actions: jnp.ndarray,
                  temperature: float = 1.0,):
-        backbone = Recurrent(self.hidden_dims,
-                             self.recurrent_hidden_dim,
-                             self.n_actions)
-        # time dimension should be third
-        # traj x time x agent x dim -> traj x agent x time x dim
-        inputs = observations.transpose((0, 2, 1, 3))
-        new_carry, outputs = backbone(carry, inputs)
-        logits = outputs.transpose((0, 2, 1, 3))
-        # set logits of unavailable actions to -inf
+        if self.shared:
+            Backbone = Recurrent
+        else:
+            Backbone = nn.vmap(
+                Recurrent,
+                variable_axes={'params': 0},
+                split_rngs={'params': True},
+                in_axes=(1, 2),  # traj x |agent| x dim,   traj x time x |agent|  x dim
+                out_axes=(1, 2),
+                )
+
+        backbone = Backbone(self.hidden_dims,
+                            self.recurrent_hidden_dim,
+                            self.n_actions)
+        new_carry, logits = backbone(carry, observations)
         masked_logits = jnp.where(available_actions, logits, IMPOSSIBLE_ACTION_LOGIT)
         base_dist = tfd.Categorical(logits=masked_logits)
         return new_carry, base_dist
@@ -45,6 +52,7 @@ class RecurrentConstrainedCategoricalPolicy(nn.Module):
 class ConstrainedCategoricalPolicy(nn.Module):
     hidden_dims: Sequence[int]
     n_actions: int
+    shared: bool
 
     @nn.compact
     def __call__(self,
@@ -52,10 +60,19 @@ class ConstrainedCategoricalPolicy(nn.Module):
                  available_actions: jnp.ndarray,
                  temperature: float = 1.0,
                  training: bool = False) -> tfd.Distribution:
-        outputs = MLP(self.hidden_dims,
-                      activate_final=True)(observations)
+        # traj x time x agent x dim
+        if self.shared:
+            Backbone = MLP
+        else:
+            Backbone = nn.vmap(MLP,
+                               variable_axes={'params': 0},
+                               split_rngs={'params': True},
+                               in_axes=2,
+                               out_axes=2)
+        backbone = Backbone(self.hidden_dims,
+                            activate_final=True)
+        outputs = backbone(observations)
         logits = nn.Dense(self.n_actions)(outputs)
-        # set logits of unavailable actions to -inf
         masked_logits = jnp.where(available_actions, logits, IMPOSSIBLE_ACTION_LOGIT)
         base_dist = tfd.Categorical(logits=masked_logits)
         return base_dist
