@@ -277,9 +277,20 @@ def main(_):
                 update_info = agent.update(prev_data, data)
                 prev_data = data
             else:
-                update_info = agent.update_except_actor(prev_data, data, prev_actor)
-                prev_actor = agent.actor
-                update_info_actor = agent.update_actor(data)
+                update_only_intrinsic = (FLAGS.config.stop_agent_training_at is not None) and \
+                                        (FLAGS.config.stop_agent_training_at < step_counter.total_steps)
+                update_info = agent.update_except_actor(prev_data, data, prev_actor,
+                                                        update_only_intrinsic)
+                if update_only_intrinsic:
+                    agent.actor = prev_actor
+                    prev_data, _ = collect_trajectories(env, agent,
+                                                        n_trajectories=config.trajectories_per_update,
+                                                        use_recurrent_policy=config.use_recurrent_policy,
+                                                        one_hot_to_observations=FLAGS.config.one_hot_to_observations)
+                    update_info_actor = agent.update_actor(prev_data)
+                else:
+                    prev_actor = agent.actor
+                    update_info_actor = agent.update_actor(data)
                 update_info.update(update_info_actor)
                 prev_data = data
         else:
