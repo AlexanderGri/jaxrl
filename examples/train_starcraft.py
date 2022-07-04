@@ -251,6 +251,9 @@ def main(_):
                     env_info["episode_limit"],
                     **learner_kwargs)
 
+    if config.model_load_path != '':
+        agent.load(config.model_load_path)
+
     interval_keys = ['eval', 'log', 'replay', 'save']
     intervals = [getattr(config, f'{key}_interval') for key in interval_keys ]
     step_counter = StepCounter(interval_keys, intervals)

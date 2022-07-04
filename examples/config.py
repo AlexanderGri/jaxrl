@@ -5,6 +5,7 @@ def get_config():
     config = ml_collections.ConfigDict()
 
     config.save_dir = './tmp'
+    config.model_load_path = ''
     config.eval_episodes = 10
     config.log_interval = int(1e3)
     config.replay_interval = int(5e4)

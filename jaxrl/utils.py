@@ -1,5 +1,7 @@
 from typing import Optional, List
 
+import yaml
+
 import gym
 from gym.wrappers import RescaleAction
 from gym.wrappers.pixel_observation import PixelObservationWrapper
@@ -77,6 +79,14 @@ def make_env(env_name: str,
     env.observation_space.seed(seed)
 
     return env
+
+
+def load_config(path):
+    with open(path, 'r') as f:
+        raw_text = f.read()
+    config_text = raw_text.split('\n\n')[0][9:]
+    config = yaml.unsafe_load(config_text)
+    return config
 
 
 class StepCounter:
