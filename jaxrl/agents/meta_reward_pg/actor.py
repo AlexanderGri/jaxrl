@@ -10,11 +10,9 @@ from jaxrl.networks.critic_net import RewardAndCritics
 
 
 @functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_importance_sampling',))
-def get_actor_loss(actor: Model, actor_params, values: jnp.ndarray, next_values: jnp.ndarray,
-                   data: PaddedTrajectoryData, rewards: jnp.ndarray, discount: float,
+def get_actor_loss(actor: Model, actor_params, advantages: jnp.ndarray, data: PaddedTrajectoryData,
                    entropy_coef: float, use_recurrent_policy: bool, use_importance_sampling: bool = False,
                    init_carry: Optional[jnp.ndarray] = None) -> Tuple[jnp.ndarray, InfoDict]:
-    advantages = rewards + discount * next_values - values
 
     if use_recurrent_policy:
         _, dist = actor.apply_fn({'params': actor_params},
@@ -45,9 +43,10 @@ def update_extrinsic(actor: Model, extrinsic_critic: Model, data: PaddedTrajecto
     values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
     next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
     rewards = jnp.expand_dims(data.rewards, axis=2)
+    advantages = rewards + discount * next_values - values
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        return get_actor_loss(actor, actor_params, values, next_values,
-                              data, rewards, discount, entropy_coef,
+        return get_actor_loss(actor, actor_params, advantages,
+                              data, entropy_coef=entropy_coef,
                               use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)
@@ -71,10 +70,10 @@ def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_p
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
     next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
-
+    advantages = mixed_rewards + discount * next_values - values
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        return get_actor_loss(actor, actor_params, values, next_values,
-                              data, mixed_rewards, discount, entropy_coef,
+        return get_actor_loss(actor, actor_params, advantages,
+                              data, entropy_coef=entropy_coef,
                               use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)

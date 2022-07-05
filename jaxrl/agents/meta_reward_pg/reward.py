@@ -33,9 +33,12 @@ def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Mode
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
-        return get_actor_loss(actor, actor.params, values, next_values,
-                              outer_update_data, rewards, discount, 0.,
-                              use_recurrent_policy, use_importance_sampling, init_carry,)
+        advantages = rewards + discount * next_values - values
+        return get_actor_loss(actor, actor.params, advantages,
+                              outer_update_data, entropy_coef=0.,
+                              use_recurrent_policy=use_recurrent_policy,
+                              use_importance_sampling=use_importance_sampling,
+                              init_carry=init_carry,)
 
     (_, info), grad = jax.value_and_grad(reward_loss_fn, has_aux=True)(intrinsic_critics.params)
     return grad, info
