@@ -63,6 +63,7 @@ class MetaNoRewardPGLearner(object):
                  actor_hidden_dims: Sequence[int] = (64,),
                  actor_recurrent_hidden_dim: int = 64,
                  use_recurrent_policy: bool = True,
+                 use_mc_return: bool = False,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3,):
 
@@ -72,6 +73,8 @@ class MetaNoRewardPGLearner(object):
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
+        if use_mc_return:
+            raise NotImplementedError
 
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, critic_key = jax.random.split(rng, 3)

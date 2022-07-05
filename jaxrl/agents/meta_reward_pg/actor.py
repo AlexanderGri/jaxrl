@@ -37,13 +37,23 @@ def get_actor_loss(actor: Model, actor_params, advantages: jnp.ndarray, data: Pa
     }
 
 
+def compute_advantage(rewards: jnp.ndarray, values: jnp.ndarray, next_values: jnp.ndarray,
+                      discount: float, use_mc_return: bool = False) -> jnp.ndarray:
+    if use_mc_return:
+        raise NotImplementedError()
+    else:
+        advantages = rewards + discount * next_values - values
+    return advantages
+
+
 def update_extrinsic(actor: Model, extrinsic_critic: Model, data: PaddedTrajectoryData,
                      discount: float, entropy_coef: float,
-                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
+                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
+                     use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
     values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
     next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
     rewards = jnp.expand_dims(data.rewards, axis=2)
-    advantages = rewards + discount * next_values - values
+    advantages = compute_advantage(rewards, values, next_values, discount, use_mc_return)
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, advantages,
                               data, entropy_coef=entropy_coef,
@@ -62,7 +72,8 @@ def get_statistics(arr: jnp.array):
 
 def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_params: Params,
                      data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None) -> Tuple[Model, InfoDict]:
+                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
+                     use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
     all_meta_rewards = intrinsic_critics.apply_fn({'params': intrinsic_critics_params}, data.states,
                                                   method=RewardAndCritics.get_rewards)
     indices = (*jnp.indices(data.actions.shape), data.actions)
@@ -70,7 +81,7 @@ def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_p
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
     next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
-    advantages = mixed_rewards + discount * next_values - values
+    advantages = compute_advantage(mixed_rewards, values, next_values, discount, use_mc_return)
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, advantages,
                               data, entropy_coef=entropy_coef,

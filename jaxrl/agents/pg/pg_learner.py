@@ -71,6 +71,7 @@ class PGLearner(object):
                  actor_recurrent_hidden_dim: int = 64,
                  use_recurrent_policy: bool = True,
                  use_shared_policy: bool = True,
+                 use_mc_return: bool = False,
                  discount: float = 0.99,
                  entropy_coef: float = 1e-3):
 
@@ -79,6 +80,8 @@ class PGLearner(object):
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
+        if use_mc_return:
+            raise NotImplementedError
 
         _, _, n_agents, _ = observations.shape
 

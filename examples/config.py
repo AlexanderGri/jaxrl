@@ -23,6 +23,7 @@ def get_config():
     config.use_meta_rewards = True
     config.one_hot_to_observations = False
     config.stop_agent_training_at = -1
+    config.use_mc_return = False
 
     config.penalty_per_step = 0.0
 
