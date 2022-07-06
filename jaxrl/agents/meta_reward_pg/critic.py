@@ -22,8 +22,12 @@ def _compute_returns(rewards: jnp.ndarray,
     return discounted_returns
 
 
-compute_returns = jax.vmap(_compute_returns, in_axes=(0, 0, 0, None, None))
-compute_returns_agents = jax.vmap(compute_returns, in_axes=(2, None, 1, None, None), out_axes=2)
+# |n_traj| x n_steps, |n_traj|, |n_traj|
+compute_returns = jax.vmap(_compute_returns, in_axes=(0, 0, 0, None, None), out_axes=0)
+
+
+# n_traj x n_steps x |n_agents|, n_traj, n_traj x |n_agents|
+compute_returns_multiagent = jax.vmap(compute_returns, in_axes=(2, None, 1, None, None), out_axes=2)
 
 
 def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
@@ -59,19 +63,19 @@ def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
 
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        values = intrinsic_critics.apply_fn({'params': critic_params}, data.states,
-                                            method=RewardAndCritics.get_values)
-        target_values = compute_returns_agents(mixed_rewards,
-                                               data.dones,
-                                               last_values,
-                                               discount,
-                                               length)
-        critic_loss = (values - target_values)**2
+        values_multiagent = intrinsic_critics.apply_fn({'params': critic_params}, data.states,
+                                                       method=RewardAndCritics.get_values)
+        returns_multiagent = compute_returns_multiagent(mixed_rewards,
+                                                        data.dones,
+                                                        last_values,
+                                                        discount,
+                                                        length)
+        critic_loss = (values_multiagent - returns_multiagent)**2
         # here several ways of normalizing are possible
         agents_alive_normalized = data.agent_alive / data.agent_alive.sum()
         critic_loss = (critic_loss * agents_alive_normalized).sum()
         n_valid_states_per_agent = data.agent_alive.sum(0, keepdims=True).sum(1, keepdims=True)
-        mean_values_per_agent = (values * data.agent_alive / n_valid_states_per_agent).sum(1).sum(0)
+        mean_values_per_agent = (values_multiagent * data.agent_alive / n_valid_states_per_agent).sum(1).sum(0)
         return critic_loss, {
             'critic_loss': critic_loss,
             **{f'v{i}': mean_v for i, mean_v in enumerate(mean_values_per_agent)}

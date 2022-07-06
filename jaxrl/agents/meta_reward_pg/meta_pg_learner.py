@@ -18,9 +18,9 @@ from jaxrl.networks import critic_net, policies
 from jaxrl.networks.common import InfoDict, Model, PRNGKey, GRU
 
 
-@functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_mc_return'))
+@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'use_mc_return'))
 def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
-                data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
+                data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float, length: int,
                 use_recurrent_policy: bool, use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[PRNGKey, Model, InfoDict]:
     rng, key = jax.random.split(rng)
@@ -28,7 +28,7 @@ def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
                                                    intrinsic_critics,
                                                    intrinsic_critics.params,
                                                    data, discount, entropy_coef,
-                                                   mix_coef, use_recurrent_policy, init_carry,
+                                                   mix_coef, length, use_recurrent_policy, init_carry,
                                                    use_mc_return)
 
     return rng, new_actor, actor_info
@@ -50,6 +50,7 @@ def _update_intrinsic_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Mo
                                                discount,
                                                entropy_coef,
                                                mix_coef,
+                                               length,
                                                use_recurrent_policy,
                                                sampling_scheme,
                                                init_carry,
@@ -207,7 +208,7 @@ class MetaPGLearner(object):
 
         new_rng, new_actor, actor_info = _update_actor_jit(
             self.rng, self.actor, self.intrinsic_critics, data,
-            self.discount, self.entropy_coef, self.mix_coef,
+            self.discount, self.entropy_coef, self.mix_coef, self.length,
             self.use_recurrent_policy, self.use_mc_return, init_carry)
 
         self.rng = new_rng

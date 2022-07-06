@@ -7,6 +7,7 @@ import jax
 from jaxrl.datasets import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
 from jaxrl.networks.critic_net import RewardAndCritics
+from jaxrl.agents.meta_reward_pg.critic import compute_returns, compute_returns_multiagent
 
 
 @functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_importance_sampling',))
@@ -37,30 +38,27 @@ def get_actor_loss(actor: Model, actor_params, advantages: jnp.ndarray, data: Pa
     }
 
 
-def compute_advantage(rewards: jnp.ndarray, values: jnp.ndarray, next_values: jnp.ndarray,
-                      discount: float, use_mc_return: bool = False) -> jnp.ndarray:
+def compute_advantage(rewards: jnp.ndarray, dones: jnp.ndarray, values: jnp.ndarray, next_values: jnp.ndarray,
+                      discount: float, length: int, use_mc_return: bool = False) -> jnp.ndarray:
     if use_mc_return:
-        raise NotImplementedError()
+        last_values = next_values[:, -1]
+        returns = compute_returns(rewards, dones, last_values, discount, length)
+        advantages = returns - values
     else:
         advantages = rewards + discount * next_values - values
     return advantages
 
 
-def update_extrinsic(actor: Model, extrinsic_critic: Model, data: PaddedTrajectoryData,
-                     discount: float, entropy_coef: float,
-                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
-                     use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
-    values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
-    next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
-    rewards = jnp.expand_dims(data.rewards, axis=2)
-    advantages = compute_advantage(rewards, values, next_values, discount, use_mc_return)
-    def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        return get_actor_loss(actor, actor_params, advantages,
-                              data, entropy_coef=entropy_coef,
-                              use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
-
-    new_actor, info = actor.apply_gradient(actor_loss_fn)
-    return new_actor, info
+def compute_advantage_multiagent(rewards_multiagent: jnp.ndarray, dones: jnp.ndarray, values_multiagent: jnp.ndarray,
+                               next_values_multiagent: jnp.ndarray, discount: float, length: int,
+                               use_mc_return: bool = False) -> jnp.ndarray:
+    if use_mc_return:
+        last_values_multiagent = next_values_multiagent[:, -1]
+        returns_multiagent = compute_returns_multiagent(rewards_multiagent, dones, last_values_multiagent, discount, length)
+        advantages = returns_multiagent - values_multiagent
+    else:
+        advantages = rewards_multiagent + discount * next_values_multiagent - values_multiagent
+    return advantages
 
 
 def get_statistics(arr: jnp.array):
@@ -72,7 +70,7 @@ def get_statistics(arr: jnp.array):
 
 def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_params: Params,
                      data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-                     use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
+                     length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
                      use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
     all_meta_rewards = intrinsic_critics.apply_fn({'params': intrinsic_critics_params}, data.states,
                                                   method=RewardAndCritics.get_rewards)
@@ -81,7 +79,7 @@ def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_p
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
     next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
-    advantages = compute_advantage(mixed_rewards, values, next_values, discount, use_mc_return)
+    advantages = compute_advantage(mixed_rewards, data.dones, values, next_values, discount, length, use_mc_return)
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, advantages,
                               data, entropy_coef=entropy_coef,

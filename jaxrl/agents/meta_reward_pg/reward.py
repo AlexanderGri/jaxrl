@@ -14,7 +14,7 @@ from jaxrl.agents.meta_reward_pg.actor import get_actor_loss, compute_advantage
 def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
              prev_data: PaddedTrajectoryData,
              data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-             use_recurrent_policy: bool, sampling_scheme: str,
+             length, use_recurrent_policy: bool, sampling_scheme: str,
              init_carry: Optional[jnp.ndarray] = None, use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
     if sampling_scheme == 'reuse':
         outer_update_data = data
@@ -29,11 +29,11 @@ def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Mode
     def reward_loss_fn(intrinsic_critics_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         actor, _ = update_intrinsic_actor(prev_actor, intrinsic_critics, intrinsic_critics_params,
                                           prev_data, discount, entropy_coef, mix_coef,
-                                          use_recurrent_policy, init_carry)
+                                          length, use_recurrent_policy, init_carry)
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
-        advantages = compute_advantage(rewards, values, next_values, discount, use_mc_return)
+        advantages = compute_advantage(rewards, data.dones,  values, next_values, discount, use_mc_return)
         return get_actor_loss(actor, actor.params, advantages,
                               outer_update_data, entropy_coef=0.,
                               use_recurrent_policy=use_recurrent_policy,
