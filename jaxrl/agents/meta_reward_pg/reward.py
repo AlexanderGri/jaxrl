@@ -11,7 +11,7 @@ from jaxrl.agents.meta_reward_pg.actor import update_intrinsic as update_intrins
 from jaxrl.agents.meta_reward_pg.actor import get_actor_loss, compute_advantage
 
 # @functools.partial(jax.jit, static_argnames=('use_recurrent_policy',))
-def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Model,
+def get_grad(prev_actor: Model, intrinsic_reward: Model, intrinsic_critic: Model, extrinsic_critic: Model,
              prev_data: PaddedTrajectoryData,
              data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
              length, use_recurrent_policy: bool, sampling_scheme: str,
@@ -26,8 +26,8 @@ def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Mode
         outer_update_data = None
         use_importance_sampling = None
 
-    def reward_loss_fn(intrinsic_critics_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        actor, _ = update_intrinsic_actor(prev_actor, intrinsic_critics, intrinsic_critics_params,
+    def reward_loss_fn(intrinsic_reward_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
+        actor, _ = update_intrinsic_actor(prev_actor, intrinsic_reward, intrinsic_reward_params, intrinsic_critic,
                                           prev_data, discount, entropy_coef, mix_coef,
                                           length, use_recurrent_policy, init_carry)
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
@@ -40,5 +40,5 @@ def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Mode
                               use_importance_sampling=use_importance_sampling,
                               init_carry=init_carry,)
 
-    (_, info), grad = jax.value_and_grad(reward_loss_fn, has_aux=True)(intrinsic_critics.params)
+    (_, info), grad = jax.value_and_grad(reward_loss_fn, has_aux=True)(intrinsic_reward.params)
     return grad, info

@@ -19,14 +19,15 @@ from jaxrl.networks.common import InfoDict, Model, PRNGKey, GRU
 
 
 @functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'use_mc_return'))
-def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
+def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_reward: Model, intrinsic_critic: Model,
                 data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float, length: int,
                 use_recurrent_policy: bool, use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[PRNGKey, Model, InfoDict]:
     rng, key = jax.random.split(rng)
     new_actor, actor_info = update_intrinsic_actor(actor,
-                                                   intrinsic_critics,
-                                                   intrinsic_critics.params,
+                                                   intrinsic_reward,
+                                                   intrinsic_reward.params,
+                                                   intrinsic_critic,
                                                    data, discount, entropy_coef,
                                                    mix_coef, length, use_recurrent_policy, init_carry,
                                                    use_mc_return)
@@ -35,15 +36,16 @@ def _update_actor_jit(rng: PRNGKey, actor: Model, intrinsic_critics: Model,
 
 
 @functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme', 'acc_intrinsic_grads', 'use_mc_return'))
-def _update_intrinsic_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Model,
+def _update_intrinsic_jit(rng: PRNGKey, prev_actor: Model, intrinsic_reward: Model, intrinsic_critic: Model,
                           extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                           data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
                           length: int, use_recurrent_policy: bool, sampling_scheme: str, acc_intrinsic_grads: bool,
                           use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
-        -> Tuple[PRNGKey, Model, InfoDict]:
+        -> Tuple[PRNGKey, Model, Model, InfoDict]:
     rng, key = jax.random.split(rng)
     grad_reward, reward_info = get_grad_reward(prev_actor,
-                                               intrinsic_critics,
+                                               intrinsic_reward,
+                                               intrinsic_critic,
                                                extrinsic_critic,
                                                prev_data,
                                                data,
@@ -55,51 +57,45 @@ def _update_intrinsic_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Mo
                                                sampling_scheme,
                                                init_carry,
                                                use_mc_return)
-    if acc_intrinsic_grads:
-        new_intrinsic_critics = intrinsic_critics
-    else:
-        new_intrinsic_critics = intrinsic_critics.apply_gradient(grads=grad_reward, has_aux=False)
+    new_intrinsic_reward = intrinsic_reward.apply_gradient(grads=grad_reward, has_aux=False)
 
     rng, key = jax.random.split(rng)
-    intrinsic_critic_grad, intrinsic_critics_info = get_grad_instrinsic_critic(new_intrinsic_critics,
+    intrinsic_critic_grad, intrinsic_critics_info = get_grad_instrinsic_critic(new_intrinsic_reward,
+                                                                               intrinsic_critic,
                                                                                data,
                                                                                discount,
                                                                                length,
                                                                                mix_coef)
-    if acc_intrinsic_grads:
-        full_grad = tree_map(lambda pt1, pt2: pt1 + pt2, grad_reward, intrinsic_critic_grad)
-        new_new_intrinsic_critics = new_intrinsic_critics.apply_gradient(grads=full_grad, has_aux=False)
-    else:
-        new_new_intrinsic_critics = new_intrinsic_critics.apply_gradient(grads=intrinsic_critic_grad, has_aux=False)
+    new_intrinsic_critic = intrinsic_critic.apply_gradient(grads=intrinsic_critic_grad, has_aux=False)
 
     info = {}
     for d, name in zip([reward_info, intrinsic_critics_info],
                        ['outer', 'intrinsic']):
         info.update({f'{name}_{k}': v for k, v in d.items()})
-    return rng, new_new_intrinsic_critics, info
+    return rng, new_intrinsic_reward, new_intrinsic_critic, info
 
 
 @functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme', 'acc_intrinsic_grads', 'use_mc_return'))
-def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_critics: Model,
+def _update_except_actor_jit(rng: PRNGKey, prev_actor: Model, intrinsic_reward: Model, intrinsic_critic: Model,
                              extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                              data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
                              length: int, use_recurrent_policy: bool, sampling_scheme: str, acc_intrinsic_grads: bool,
                              use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
-        -> Tuple[PRNGKey, Model, Model, InfoDict]:
+        -> Tuple[PRNGKey, Model, Model, Model, InfoDict]:
     rng, key = jax.random.split(rng)
     new_extrinsic_critic, extrinsic_critic_info = update_extrinsic_critic(extrinsic_critic,
                                                                           data,
                                                                           discount,
                                                                           length)
 
-    rng, new_intrinsic_critics, info = _update_intrinsic_jit(
-        rng, prev_actor, intrinsic_critics, new_extrinsic_critic,
+    rng, new_intrinsic_reward, new_intrinsic_critic, info = _update_intrinsic_jit(
+        rng, prev_actor, intrinsic_reward, intrinsic_critic, new_extrinsic_critic,
         prev_data, data, discount, entropy_coef, mix_coef, length,
         use_recurrent_policy, sampling_scheme, acc_intrinsic_grads, use_mc_return, init_carry)
 
     for k, v in extrinsic_critic_info.items():
         info[f'extrinsic_{k}'] = v
-    return rng, new_extrinsic_critic, new_intrinsic_critics, info
+    return rng, new_extrinsic_critic, new_intrinsic_reward, new_intrinsic_critic, info
 
 
 class MetaPGLearner(object):
@@ -144,7 +140,7 @@ class MetaPGLearner(object):
         assert use_shared_reward or not use_shared_value
 
         rng = jax.random.PRNGKey(seed)
-        rng, actor_key, extrinsic_critic_key, intrinsic_critics_key = jax.random.split(rng, 4)
+        rng, actor_key, extrinsic_critic_key, intrinsic_reward_key, intrinsic_critic_key = jax.random.split(rng, 5)
         if self.use_recurrent_policy:
             actor_def = policies.RecurrentConstrainedCategoricalPolicy(
                 hidden_dims=actor_hidden_dims,
@@ -167,17 +163,23 @@ class MetaPGLearner(object):
         extrinsic_critic = Model.create(extrinsic_critic_def,
                                         inputs=[extrinsic_critic_key, states],
                                         tx=optax.adam(learning_rate=critic_lr))
-        intrinsic_critic_def = critic_net.RewardAndCritics(critic_hidden_dims, n_agents, n_actions,
-                                                           use_shared_reward, use_shared_value)
-        intrinsic_critics = Model.create(intrinsic_critic_def,
-                                         inputs=[intrinsic_critics_key, states],
-                                         tx=optax.adam(learning_rate=critic_lr))
+        intrinsic_reward_def = critic_net.IntrinsicReward(critic_hidden_dims, n_agents, n_actions,
+                                                          use_shared_reward)
+        intrinsic_reward = Model.create(intrinsic_reward_def,
+                                        inputs=[intrinsic_reward_key, states],
+                                        tx=optax.adam(learning_rate=critic_lr))
+        intrinsic_critic_def = critic_net.IntrinsicCritic(critic_hidden_dims, n_agents, n_actions,
+                                                          use_shared_value)
+        intrinsic_critic = Model.create(intrinsic_critic_def,
+                                        inputs=[intrinsic_critic_key, states],
+                                        tx=optax.adam(learning_rate=critic_lr))
 
         self.prev_data = None
         self.prev_actor = None
         self.actor = actor
         self.extrinsic_critic = extrinsic_critic
-        self.intrinsic_critics = intrinsic_critics
+        self.intrinsic_reward = intrinsic_reward
+        self.intrinsic_critic = intrinsic_critic
         self.rng = rng
 
     def sample_actions(self,
@@ -207,7 +209,7 @@ class MetaPGLearner(object):
         init_carry = self.initialize_carry(n_trajectories, n_agents)
 
         new_rng, new_actor, actor_info = _update_actor_jit(
-            self.rng, self.actor, self.intrinsic_critics, data,
+            self.rng, self.actor, self.intrinsic_reward, self.intrinsic_critic, data,
             self.discount, self.entropy_coef, self.mix_coef, self.length,
             self.use_recurrent_policy, self.use_mc_return, init_carry)
 
@@ -229,19 +231,20 @@ class MetaPGLearner(object):
             opt_state = tx.init(prev_actor.params)
             prev_actor = prev_actor.replace(tx=tx, opt_state=opt_state)
 
-        args = (self.rng, prev_actor, self.intrinsic_critics, self.extrinsic_critic,
+        args = (self.rng, prev_actor, self.intrinsic_reward, self.intrinsic_critic, self.extrinsic_critic,
                 prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
                 self.use_recurrent_policy, self.sampling_scheme, self.acc_intrinsic_grads, self.use_mc_return, init_carry)
         if update_only_intrinsic:
-            new_rng, new_intrinsic_critics, info = _update_intrinsic_jit(*args)
+            new_rng, new_intrinsic_reward, new_intrinsic_critic, info = _update_intrinsic_jit(*args)
             new_extrinsic_critic = self.extrinsic_critic
         else:
-            new_rng, new_extrinsic_critic, new_intrinsic_critics, info = _update_except_actor_jit(*args)
+            new_rng, new_extrinsic_critic, new_intrinsic_reward, new_intrinsic_critic, info = _update_except_actor_jit(*args)
 
 
         self.rng = new_rng
         self.extrinsic_critic = new_extrinsic_critic
-        self.intrinsic_critics = new_intrinsic_critics
+        self.intrinsic_reward = new_intrinsic_reward
+        self.intrinsic_critic = new_intrinsic_critic
         return info
 
     def initialize_carry(self, n_trajectories, n_agents):
@@ -252,10 +255,12 @@ class MetaPGLearner(object):
 
     def save(self, path):
         self.actor.save(f'{path}_actor')
-        self.intrinsic_critics.save(f'{path}_intrinsic_critics')
+        self.intrinsic_reward.save(f'{path}_intrinsic_reward')
+        self.intrinsic_critic.save(f'{path}_intrinsic_critic')
         self.extrinsic_critic.save(f'{path}_extrinsic_critic')
 
     def load(self, path):
         self.actor = self.actor.load(f'{path}_actor')
-        self.intrinsic_critics = self.intrinsic_critics.load(f'{path}_intrinsic_critics')
+        self.intrinsic_reward = self.intrinsic_reward.load(f'{path}_intrinsic_reward')
+        self.intrinsic_critic = self.intrinsic_critic.load(f'{path}_intrinsic_critic')
         self.extrinsic_critic = self.extrinsic_critic.load(f'{path}_extrinsic_critic')

@@ -54,17 +54,16 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
     return new_critic, info
 
 
-def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
+def get_grad_intrinsic(intrinsic_reward: Model, intrinsic_critic: Model, data: PaddedTrajectoryData,
                        discount: float, length: int, mix_coef: float) -> Tuple[Model, InfoDict]:
-    last_values = intrinsic_critics(data.next_states[:, -1], method=RewardAndCritics.get_values)
-    all_meta_rewards = intrinsic_critics(data.states, method=RewardAndCritics.get_rewards)
+    last_values = intrinsic_critic(data.next_states[:, -1])
+    all_meta_rewards = intrinsic_reward(data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
     meta_rewards = all_meta_rewards[indices]
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
 
-    def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        values_multiagent = intrinsic_critics.apply_fn({'params': critic_params}, data.states,
-                                                       method=RewardAndCritics.get_values)
+    def critic_loss_fn(intrinsic_critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
+        values_multiagent = intrinsic_critic.apply_fn({'params': intrinsic_critic_params}, data.states)
         returns_multiagent = compute_returns_multiagent(mixed_rewards,
                                                         data.dones,
                                                         last_values,
@@ -81,6 +80,6 @@ def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
             **{f'v{i}': mean_v for i, mean_v in enumerate(mean_values_per_agent)}
         }
 
-    (_, info), grad = jax.value_and_grad(critic_loss_fn, has_aux=True)(intrinsic_critics.params)
+    (_, info), grad = jax.value_and_grad(critic_loss_fn, has_aux=True)(intrinsic_critic.params)
 
     return grad, info

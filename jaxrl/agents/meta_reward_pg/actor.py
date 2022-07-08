@@ -68,17 +68,16 @@ def get_statistics(arr: jnp.array):
     return info
 
 
-def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_params: Params,
+def update_intrinsic(actor: Model, intrinsic_reward: Model, intrinsic_reward_params: Params, intrinsic_critic: Model,
                      data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
                      length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
                      use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
-    all_meta_rewards = intrinsic_critics.apply_fn({'params': intrinsic_critics_params}, data.states,
-                                                  method=RewardAndCritics.get_rewards)
+    all_meta_rewards = intrinsic_reward.apply_fn({'params': intrinsic_reward_params}, data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
     meta_rewards = all_meta_rewards[indices]
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
-    values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
-    next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
+    values = intrinsic_critic(data.states)
+    next_values = intrinsic_critic(data.next_states)
     advantages = compute_advantage(mixed_rewards, data.dones, values, next_values, discount, length, use_mc_return)
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, advantages,
