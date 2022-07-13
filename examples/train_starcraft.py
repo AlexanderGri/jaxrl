@@ -280,8 +280,7 @@ def main(_):
                 update_info = agent.update(prev_data, data)
                 prev_data = data
             else:
-                update_only_intrinsic = (FLAGS.config.stop_agent_training_at != -1) and \
-                                        (FLAGS.config.stop_agent_training_at < step_counter.total_steps)
+                update_only_intrinsic = (step_counter.total_steps // int(1e6)) % 2
                 update_info = agent.update_except_actor(prev_data, data, prev_actor,
                                                         update_only_intrinsic)
                 if update_only_intrinsic:
