@@ -113,6 +113,7 @@ class MetaPGLearner(object):
                  n_agents: int,
                  actor_lr: float = 3e-4,
                  critic_lr: float = 3e-4,
+                 optimizer_name = 'adam',
                  critic_hidden_dims: Sequence[int] = (128, 128),
                  actor_hidden_dims: Sequence[int] = (64,),
                  actor_recurrent_hidden_dim: int = 64,
@@ -135,6 +136,7 @@ class MetaPGLearner(object):
         self.acc_intrinsic_grads = acc_intrinsic_grads
         self.use_mc_return = use_mc_return
         self.actor_lr = actor_lr
+        self.optimizer_name = optimizer_name
         self.mimic_sgd = mimic_sgd
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
@@ -142,6 +144,13 @@ class MetaPGLearner(object):
 
         assert (not mimic_sgd) or (mimic_sgd and sampling_scheme == 'importance_sampling')
         assert use_shared_reward or not use_shared_value
+
+        if self.optimizer_name == 'adam':
+            Optimizer = functools.partial(optax.adam, eps_root=1e-8)
+        elif self.optimizer_name == 'rmsprop':
+            Optimizer = functools.partial(optax.rmsprop, eps=1e-8)
+        else:
+            raise NotImplementedError()
 
         rng = jax.random.PRNGKey(seed)
         rng, actor_key, extrinsic_critic_key, intrinsic_critics_key = jax.random.split(rng, 4)
@@ -161,17 +170,17 @@ class MetaPGLearner(object):
             inputs = [actor_key, observations, available_actions]
         actor = Model.create(actor_def,
                              inputs=inputs,
-                             tx=optax.adam(learning_rate=actor_lr, eps_root=1e-8))
+                             tx=Optimizer(learning_rate=actor_lr))
 
         extrinsic_critic_def = critic_net.StateValueCritic(critic_hidden_dims)
         extrinsic_critic = Model.create(extrinsic_critic_def,
                                         inputs=[extrinsic_critic_key, states],
-                                        tx=optax.adam(learning_rate=critic_lr))
+                                        tx=Optimizer(learning_rate=critic_lr))
         intrinsic_critic_def = critic_net.RewardAndCritics(critic_hidden_dims, n_agents, n_actions,
                                                            use_shared_reward, use_shared_value)
         intrinsic_critics = Model.create(intrinsic_critic_def,
                                          inputs=[intrinsic_critics_key, states],
-                                         tx=optax.adam(learning_rate=critic_lr))
+                                         tx=Optimizer(learning_rate=critic_lr))
 
         self.prev_data = None
         self.prev_actor = None

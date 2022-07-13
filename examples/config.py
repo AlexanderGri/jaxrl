@@ -30,6 +30,7 @@ def get_config():
     config.learner_kwargs = {
         'actor_lr': 3e-4,
         'critic_lr': 3e-4,
+        'optimizer_name': 'adam',
         'critic_hidden_dims': (128, 128),
         'discount': 0.99,
         'entropy_coef': 1e-3,
