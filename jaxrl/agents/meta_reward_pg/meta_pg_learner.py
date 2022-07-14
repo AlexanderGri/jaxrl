@@ -149,6 +149,8 @@ class MetaPGLearner(object):
             Optimizer = functools.partial(optax.adam, eps_root=1e-8)
         elif self.optimizer_name == 'rmsprop':
             Optimizer = functools.partial(optax.rmsprop, eps=1e-8)
+        elif self.optimizer_name == 'sgd':
+            Optimizer = optax.sgd
         else:
             raise NotImplementedError()
 
