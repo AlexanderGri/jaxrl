@@ -17,7 +17,7 @@ def _compute_returns(rewards: jnp.ndarray,
     # +1 because of last observation value
     coef = discount ** jnp.arange(length + 1)[::-1]
     # if done last_value is not needed
-    rewards_with_last_value = jnp.append(rewards, last_value * ~done)
+    rewards_with_last_value = jnp.append(rewards, last_value * (1. - done))
     discounted_returns = jnp.convolve(rewards_with_last_value, coef, mode='full')[length:-1]
     return discounted_returns
 
