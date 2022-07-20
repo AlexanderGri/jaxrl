@@ -130,8 +130,8 @@ def main(_):
                 else:
                     prev_actor = agent.actor
                     update_info_actor = agent.update_actor(data)
+                    prev_data = data
                 update_info.update(update_info_actor)
-                prev_data = data
         else:
             update_info = agent.update(data)
         gt.stamp('train')
