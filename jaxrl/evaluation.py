@@ -61,7 +61,8 @@ def collect_one_trajectory_per_env(envs: SubprocVecStarcraft, agent: MetaPGLearn
     carry = agent.initialize_carry(envs.num_envs)
     step = 0
     envs.reset()
-    while not_done_indices := envs.get_not_done_indices():
+    not_done_indices = envs.get_not_done_indices()
+    while not_done_indices:
         ii_unsqueezed = (not_done_indices, slice(step, step + 1), ...)
         ii = (not_done_indices, step, ...)
 
@@ -90,5 +91,6 @@ def collect_one_trajectory_per_env(envs: SubprocVecStarcraft, agent: MetaPGLearn
                     if k in step_info:
                         end_info[k].append(step_info[k])
         step += 1
+        not_done_indices = envs.get_not_done_indices()
     jax_data = PaddedTrajectoryData(*map(jnp.array, data))
     return jax_data, end_info, total_steps
