@@ -17,7 +17,8 @@ def get_config():
     config.map_name = '2s3z'
     config.reward_only_positive = True
     config.seed = 45
-    config.trajectories_per_update = 1
+    config.num_envs = 5
+    config.num_trajectories_per_env_per_update = 1
 
     config.use_recurrent_policy = True
     config.use_meta_rewards = True
@@ -25,7 +26,6 @@ def get_config():
     config.stop_agent_training_at = -1
     config.use_mc_return = False
 
-    config.penalty_per_step = 0.0
 
     config.learner_kwargs = {
         'actor_lr': 3e-4,

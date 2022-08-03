@@ -27,7 +27,7 @@ def get_actor_loss(actor: Model, actor_params, advantages: jnp.ndarray, data: Pa
         surrogate = advantages * jnp.exp(log_probs - old_log_probs)
     else:
         surrogate = advantages * log_probs
-    agent_alive_normalized = data.agent_alive / data.agent_alive.sum()
+    agent_alive_normalized = data.agents_alive / data.agents_alive.sum()
     reward_loss = -(surrogate * agent_alive_normalized).sum()
     entropy = (dist.entropy() * agent_alive_normalized).sum()
     actor_loss = reward_loss - entropy_coef * entropy
@@ -79,7 +79,7 @@ def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_p
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
     next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
-    advantages = compute_advantage(mixed_rewards, data.dones, values, next_values, discount, length, use_mc_return)
+    advantages = compute_advantage(mixed_rewards, data.is_ended, values, next_values, discount, length, use_mc_return)
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor, actor_params, advantages,
                               data, entropy_coef=entropy_coef,

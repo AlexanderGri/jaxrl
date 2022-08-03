@@ -1,117 +1,94 @@
-from typing import Tuple, Union
+from typing import Tuple
 
-from jax import numpy as jnp
 import numpy as np
-from smac.env import StarCraft2Env
 
-from jaxrl.agents import PGLearner, MetaPGLearner
-from jaxrl.datasets import PaddedTrajectoryData
+import jax.numpy as jnp
+
+from jaxrl.agents import MetaPGLearner
+from jaxrl.datasets.dataset import PaddedTrajectoryData, concatenate, init_data
+from jaxrl.vec_env import SubprocVecStarcraft
 
 
-def collect_trajectories(env: StarCraft2Env, agent: Union[PGLearner, MetaPGLearner],
-                         n_trajectories: int = 1, save_replay: bool = False,
-                         replay_prefix: str = None, use_recurrent_policy: bool = False,
-                         one_hot_to_observations: bool = False, distribution='log_prob') \
-        -> Tuple[PaddedTrajectoryData, dict]:
-    env.replay_prefix = replay_prefix
-    env_info = env.get_env_info()
-    state_dim = env_info['state_shape']
-    obs_dim = env_info['obs_shape']
-    time_limit = env_info['episode_limit']
-    n_actions = env_info['n_actions']
-    n_agents = env_info['n_agents']
-    if one_hot_to_observations:
-        obs_dim += n_agents
+def collect_trajectories(envs: SubprocVecStarcraft, agent: MetaPGLearner,
+                         num_trajectories_per_env,
+                         save_replay: bool = False, replay_prefix: str = None,
+                         distribution='log_prob') -> Tuple[PaddedTrajectoryData, dict]:
+    datas = []
+    all_end_info = {}
+    total_steps = 0
+    for _ in range(num_trajectories_per_env):
+        try:
+            jax_data, end_info, num_steps = collect_one_trajectory_per_env(envs, agent,
+                                                                           save_replay=save_replay,
+                                                                           replay_prefix=replay_prefix,
+                                                                           distribution=distribution)
+        except Exception:
+            envs.close()
+            raise
 
-    # per trajectory
-    dones = np.zeros((n_trajectories,), dtype=bool)
-    # per trajectory per step
-    states = np.zeros((n_trajectories, time_limit, state_dim))
-    next_states = np.zeros((n_trajectories, time_limit, state_dim))
-    rewards = np.zeros((n_trajectories, time_limit))
-    all_agents_alive = np.zeros((n_trajectories, time_limit), dtype=bool)
-    # per trajectory per step per agent
-    observations = np.zeros((n_trajectories, time_limit, n_agents, obs_dim))
-    next_observations = np.zeros((n_trajectories, time_limit, n_agents, obs_dim))
-    actions = np.zeros((n_trajectories, time_limit, n_agents), dtype=int)
-    log_prob = np.zeros((n_trajectories, time_limit, n_agents))
-    available_actions = np.zeros((n_trajectories, time_limit, n_agents, n_actions), dtype=bool)
-    agent_alive = np.zeros((n_trajectories, time_limit, n_agents), dtype=bool)
+        datas.append(jax_data)
+        for k, v in end_info.items():
+            all_end_info[k] = all_end_info.get(k, []) + v
+        total_steps += num_steps
+    combined_data = concatenate(datas)
 
-    returns = []
+    info = {'returns': (combined_data.rewards * combined_data.any_agents_alive).sum(axis=1).mean(),
+            'iter_steps': total_steps}
+    for k, arr in all_end_info.items():
+        info[k] = np.mean(arr)
+    return combined_data, info
+
+
+def collect_one_trajectory_per_env(envs: SubprocVecStarcraft, agent: MetaPGLearner,
+                                   save_replay: bool = False, replay_prefix: str = None,
+                                   distribution='log_prob') -> Tuple[PaddedTrajectoryData, dict, int]:
+    if save_replay:
+        envs.env_method('save_replay')
+    envs.set_attr('replay_prefix', replay_prefix)
+
+    data = init_data(n_trajectories=envs.num_envs,
+                     time_limit=envs.time_limit,
+                     n_agents=envs.n_agents,
+                     state_dim=envs.state_dim,
+                     obs_dim=envs.obs_dim,
+                     n_actions=envs.n_actions)
+
     total_steps = 0
     end_info = {"dead_allies": [],
                 "dead_enemies": [],
                 "battle_won": []}
-    for traj_ind in range(n_trajectories):
-        step = 0
-        ret = 0
-        done = False
-        env.reset()
-        if save_replay:
-            env.save_replay()
-        if use_recurrent_policy:
-            carry = agent.initialize_carry(1, n_agents)
-        while not done:
-            ii = (traj_ind, step, ...)
-            states[ii] = env.get_state()
-            env_obs = np.stack(env.get_obs())
-            if one_hot_to_observations:
-                observations[ii] = np.concatenate((env_obs, np.eye(n_agents)), axis=1)
-            else:
-                observations[ii] = env_obs
-            available_actions[ii] = env.get_avail_actions()
-            if use_recurrent_policy:
-                # adding two leading dimensions accounting for trajectories and steps
-                carry, cur_actions, cur_log_prob = agent.sample_actions(
-                    observations[ii][np.newaxis, np.newaxis],
-                    available_actions[ii][np.newaxis, np.newaxis],
-                    carry, distribution=distribution)
-            else:
-                cur_actions, cur_log_prob = agent.sample_actions(observations[ii][np.newaxis, np.newaxis],
-                                                                 available_actions[ii][np.newaxis, np.newaxis],
-                                                                 distribution=distribution)
-            actions[ii] = cur_actions[0, 0]
-            log_prob[ii] = cur_log_prob[0, 0]
-            all_agents_alive[ii] = True
-            agent_alive[ii] = [env.get_unit_by_id(i).health > 0 for i in range(n_agents)]
-            rewards[ii], done, step_info = env.step(actions[ii])
-            next_states[ii] = env.get_state()
-            env_obs = np.stack(env.get_obs())
-            if one_hot_to_observations:
-                next_observations[ii] = np.concatenate((env_obs, np.eye(n_agents)), axis=1)
-            else:
-                next_observations[ii] = env_obs
-            step += 1
-            ret += rewards[ii]
-        if step_info.get("episode_limit", False):
-            done = False
-        for k in end_info:
-            # sometimes step() return empty info
-            if k in step_info:
-                end_info[k].append(step_info[k])
-        dones[traj_ind] = done
-        returns.append(ret)
-        total_steps += step
-    data_to_jax = dict(
-        states=states,
-        observations=observations,
-        next_states=next_states,
-        next_observations=next_observations,
-        actions=actions,
-        log_prob=log_prob,
-        available_actions=available_actions,
-        rewards=rewards,
-        all_agents_alive=all_agents_alive,
-        agent_alive=agent_alive,
-        dones=dones,)
-    data_jax = {k: jnp.array(v) for k, v in data_to_jax.items()}
-    data = PaddedTrajectoryData(
-        length=time_limit,
-        **data_jax
-    )
-    info = {'returns': np.mean(returns),
-            'iter_steps': total_steps}
-    for k, arr in end_info.items():
-        info[k] = np.mean(arr)
-    return data, info
+
+    carry = agent.initialize_carry(envs.num_envs)
+    step = 0
+    envs.reset()
+    while not_done_indices := envs.get_not_done_indices():
+        ii_unsqueezed = (not_done_indices, slice(step, step + 1), ...)
+        ii = (not_done_indices, step, ...)
+
+        data.any_agents_alive[ii] = True
+        data.states[ii], data.observations[ii], data.available_actions[ii], data.agents_alive[ii] = envs.get_data(not_done_indices)
+
+        policy_kwargs = {'observations': data.observations[ii_unsqueezed],
+                         'available_actions': data.available_actions[ii_unsqueezed],
+                         'distribution': distribution}
+        if agent.use_recurrent_policy:
+            carry, data.actions[ii_unsqueezed], data.log_prob[ii_unsqueezed] = agent.sample_actions(**policy_kwargs, carry=carry)
+        else:
+            data.actions[ii_unsqueezed], data.log_prob[ii_unsqueezed] = agent.sample_actions(**policy_kwargs)
+
+        total_steps += len(not_done_indices)
+        data.rewards[ii], envs_done, envs_step_info = envs.step(data.actions[ii])
+        carry = carry[np.logical_not(envs_done)]
+        data.next_states[ii] = envs.get_states(not_done_indices)
+
+        for i, d, step_info in zip(not_done_indices, envs_done, envs_step_info):
+            if d:
+                episode_limit = step_info.get("episode_limit", False)
+                data.is_ended[i] = not episode_limit
+                for k in end_info:
+                    # sometimes step() return empty info
+                    if k in step_info:
+                        end_info[k].append(step_info[k])
+        step += 1
+    jax_data = PaddedTrajectoryData(*map(jnp.array, data))
+    return jax_data, end_info, total_steps

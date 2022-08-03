@@ -34,7 +34,7 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
                      discount: float, length: int) -> Tuple[Model, InfoDict]:
     last_values = extrinsic_critic(data.next_states[:, -1])
     target_values = compute_returns(data.rewards,
-                                    data.dones,
+                                    data.is_ended,
                                     last_values,
                                     discount,
                                     length)
@@ -42,7 +42,7 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         values = extrinsic_critic.apply_fn({'params': critic_params}, data.states)
         critic_loss = (values - target_values)**2
-        all_agents_alive_normalized = data.all_agents_alive / data.all_agents_alive.sum()
+        all_agents_alive_normalized = data.any_agents_alive / data.any_agents_alive.sum()
         critic_loss = (critic_loss * all_agents_alive_normalized).sum()
         return critic_loss, {
             'critic_loss': critic_loss,
@@ -66,16 +66,16 @@ def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
         values_multiagent = intrinsic_critics.apply_fn({'params': critic_params}, data.states,
                                                        method=RewardAndCritics.get_values)
         returns_multiagent = compute_returns_multiagent(mixed_rewards,
-                                                        data.dones,
+                                                        data.is_ended,
                                                         last_values,
                                                         discount,
                                                         length)
         critic_loss = (values_multiagent - returns_multiagent)**2
         # here several ways of normalizing are possible
-        agents_alive_normalized = data.agent_alive / data.agent_alive.sum()
+        agents_alive_normalized = data.agents_alive / data.agents_alive.sum()
         critic_loss = (critic_loss * agents_alive_normalized).sum()
-        n_valid_states_per_agent = data.agent_alive.sum(0, keepdims=True).sum(1, keepdims=True)
-        mean_values_per_agent = (values_multiagent * data.agent_alive / n_valid_states_per_agent).sum(1).sum(0)
+        n_valid_states_per_agent = data.agents_alive.sum(0, keepdims=True).sum(1, keepdims=True)
+        mean_values_per_agent = (values_multiagent * data.agents_alive / n_valid_states_per_agent).sum(1).sum(0)
         return critic_loss, {
             'critic_loss': critic_loss,
             **{f'v{i}': mean_v for i, mean_v in enumerate(mean_values_per_agent)}

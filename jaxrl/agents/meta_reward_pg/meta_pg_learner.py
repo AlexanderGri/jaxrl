@@ -141,6 +141,7 @@ class MetaPGLearner(object):
         self.length = length
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
+        self.n_agents = n_agents
 
         assert (not mimic_sgd) or (mimic_sgd and sampling_scheme == 'importance_sampling')
         assert use_shared_reward or not use_shared_value
@@ -162,7 +163,7 @@ class MetaPGLearner(object):
                 recurrent_hidden_dim=actor_recurrent_hidden_dim,
                 n_actions=n_actions,
                 shared=use_shared_policy)
-            carry = self.initialize_carry(1, n_agents)
+            carry = self.initialize_carry(1)
             inputs = [actor_key, carry, observations, available_actions]
         else:
             actor_def = policies.ConstrainedCategoricalPolicy(
@@ -215,7 +216,7 @@ class MetaPGLearner(object):
 
     def update_actor(self, data: PaddedTrajectoryData) -> InfoDict:
         n_trajectories, _, n_agents = data.actions.shape
-        init_carry = self.initialize_carry(n_trajectories, n_agents)
+        init_carry = self.initialize_carry(n_trajectories)
 
         new_rng, new_actor, actor_info = _update_actor_jit(
             self.rng, self.actor, self.intrinsic_critics, data,
@@ -233,7 +234,7 @@ class MetaPGLearner(object):
         if prev_data is None or prev_actor is None:
             return {}
         n_trajectories, _, n_agents = data.actions.shape
-        init_carry = self.initialize_carry(n_trajectories, n_agents)
+        init_carry = self.initialize_carry(n_trajectories)
 
         if self.mimic_sgd:
             tx = optax.sgd(learning_rate=self.actor_lr)
@@ -255,9 +256,9 @@ class MetaPGLearner(object):
         self.intrinsic_critics = new_intrinsic_critics
         return info
 
-    def initialize_carry(self, n_trajectories, n_agents):
+    def initialize_carry(self, n_trajectories):
         if self.use_recurrent_policy:
-            return GRU.initialize_carry((n_trajectories, n_agents), self.actor_recurrent_hidden_dim)
+            return GRU.initialize_carry((n_trajectories, self.n_agents), self.actor_recurrent_hidden_dim)
         else:
             return None
 

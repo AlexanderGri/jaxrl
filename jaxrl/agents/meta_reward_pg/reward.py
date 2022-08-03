@@ -33,7 +33,7 @@ def get_grad(prev_actor: Model, intrinsic_critics: Model, extrinsic_critic: Mode
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
-        advantages = compute_advantage(rewards, data.dones,  values, next_values, discount, use_mc_return)
+        advantages = compute_advantage(rewards, data.is_ended,  values, next_values, discount, use_mc_return)
         return get_actor_loss(actor, actor.params, advantages,
                               outer_update_data, entropy_coef=0.,
                               use_recurrent_policy=use_recurrent_policy,

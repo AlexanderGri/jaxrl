@@ -14,7 +14,8 @@ from tensorboardX import SummaryWriter
 from jaxrl.agents import PGLearner, MetaPGLearner, MetaNoRewardPGLearner
 from jaxrl.evaluation import collect_trajectories
 from jaxrl.utils import StepCounter
-from smac.env import StarCraft2Env
+from jaxrl.vec_env import SubprocVecStarcraft
+
 
 FLAGS = flags.FLAGS
 config_flags.DEFINE_config_file(
@@ -53,15 +54,26 @@ def main(_):
     else:
         replay_dir = None
 
-    env = StarCraft2Env(map_name=config.map_name, replay_dir=replay_dir,
-                        reward_only_positive=FLAGS.config.reward_only_positive)
-
-    env_info = env.get_env_info()
-    dummy_states_batch = np.ones((1, 1, env_info['state_shape']))
     if FLAGS.config.one_hot_to_observations:
-        obs_shape = env_info['obs_shape'] + env_info['n_agents']
+        agents_obs_fun = lambda agents_obs: np.concatenate((agents_obs, np.eye(agents_obs.shape[0])), axis=1)
     else:
-        obs_shape = env_info['obs_shape']
+        agents_obs_fun = None
+
+    env_kwargs = {'map_name': config.map_name,
+                  'replay_dir': replay_dir,
+                  'reward_only_positive': config.reward_only_positive,
+                  'continuing_episode': True}
+
+    envs = SubprocVecStarcraft(num_envs=config.num_envs,
+                               agents_obs_fun=agents_obs_fun,
+                               **env_kwargs)
+
+    env_info = envs.get_info()
+    dummy_states_batch = np.ones((1, 1, env_info['state_dim']))
+    if FLAGS.config.one_hot_to_observations:
+        obs_shape = env_info['obs_dim'] + env_info['n_agents']
+    else:
+        obs_shape = env_info['obs_dim']
     dummy_observations_batch = np.ones((1, 1, env_info['n_agents'], obs_shape))
     dummy_available_actions_batch = np.zeros((1, 1, env_info['n_agents'], env_info["n_actions"],), dtype=bool)
 
@@ -84,7 +96,7 @@ def main(_):
                     dummy_observations_batch,
                     dummy_available_actions_batch,
                     env_info["n_actions"],
-                    env_info["episode_limit"],
+                    env_info["time_limit"],
                     **learner_kwargs)
 
     if config.model_load_path != '':
@@ -100,14 +112,11 @@ def main(_):
     prev_data = None
     prev_actor = None
     while step_counter.total_steps < config.max_steps:
-        data, rollout_info = collect_trajectories(env, agent,
-                                                  n_trajectories=config.trajectories_per_update,
-                                                  use_recurrent_policy=config.use_recurrent_policy,
+        data, rollout_info = collect_trajectories(envs, agent,
+                                                  num_trajectories_per_env=config.num_trajectories_per_env_per_update,
                                                   save_replay=step_counter.check_key('replay'),
-                                                  replay_prefix=f'step_{step_counter.total_steps}_',
-                                                  one_hot_to_observations=FLAGS.config.one_hot_to_observations)
-        if config.penalty_per_step is not None:
-            data = data._replace(rewards=(data.rewards - config.penalty_per_step))
+                                                  replay_prefix=f'step_{step_counter.total_steps}_')
+
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
@@ -122,10 +131,8 @@ def main(_):
                                                         update_only_intrinsic)
                 if update_only_intrinsic:
                     agent.actor = prev_actor
-                    prev_data, _ = collect_trajectories(env, agent,
-                                                        n_trajectories=config.trajectories_per_update,
-                                                        use_recurrent_policy=config.use_recurrent_policy,
-                                                        one_hot_to_observations=FLAGS.config.one_hot_to_observations)
+                    prev_data, _ = collect_trajectories(envs, agent,
+                                                        num_trajectories_per_env=config.num_trajectories_per_env_per_update)
                     update_info_actor = agent.update_actor(prev_data)
                 else:
                     prev_actor = agent.actor
@@ -151,10 +158,9 @@ def main(_):
             gt.stamp('log')
 
         if step_counter.check_key('eval'):
-            _, eval_info = collect_trajectories(env, agent,
-                                                n_trajectories=config.eval_episodes,
-                                                use_recurrent_policy=config.use_recurrent_policy,
-                                                one_hot_to_observations=FLAGS.config.one_hot_to_observations,
+            num_trajectories_per_env = config.eval_episodes // config.num_envs
+            _, eval_info = collect_trajectories(envs, agent,
+                                                num_trajectories_per_env=num_trajectories_per_env,
                                                 distribution='det')
             for k, v in eval_info.items():
                 summary_writer.add_scalar(f'eval/{k}', v, it)
