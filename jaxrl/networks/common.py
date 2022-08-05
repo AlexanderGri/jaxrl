@@ -136,12 +136,22 @@ class Model:
         else:
             return new_model
 
+    def get_attr_names(self):
+        return ['params', 'opt_state']
+
     def save(self, save_path: str):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, 'wb') as f:
-            f.write(flax.serialization.to_bytes(self.params))
+        attr_names = self.get_attr_names()
+        for attr_name in attr_names:
+            with open(save_path + '_' + attr_name, 'wb') as f:
+                f.write(flax.serialization.to_bytes(getattr(self, attr_name)))
 
     def load(self, load_path: str) -> 'Model':
-        with open(load_path, 'rb') as f:
-            params = flax.serialization.from_bytes(self.params, f.read())
-        return self.replace(params=params)
+        attr_names = self.get_attr_names()
+        attr_values = []
+        for attr_name in attr_names:
+            with open(load_path + '_' + attr_name, 'rb') as f:
+                attr_value = flax.serialization.from_bytes(getattr(self, attr_name), f.read())
+                attr_values.append(attr_value)
+        return self.replace(**dict(zip(attr_names, attr_values)))
+
