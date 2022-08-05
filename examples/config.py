@@ -15,7 +15,7 @@ def get_config():
     config.save_replay = True
 
     config.map_name = '2s3z'
-    config.reward_only_positive = True
+    config.reward_only_positive = False
     config.seed = 45
     config.num_envs = 5
     config.num_trajectories_per_env_per_update = 1
@@ -33,7 +33,7 @@ def get_config():
         'optimizer_name': 'adam',
         'critic_hidden_dims': (128, 128),
         'discount': 0.99,
-        'entropy_coef': 1e-3,
+        'entropy_coef': 0.,
         'use_shared_policy': True,
     }
 
