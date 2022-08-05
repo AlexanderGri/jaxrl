@@ -22,7 +22,7 @@ def get_config():
 
     config.use_recurrent_policy = True
     config.use_meta_rewards = True
-    config.one_hot_to_observations = False
+    config.one_hot_to_observations = True
     config.stop_agent_training_at = -1
     config.use_mc_return = False
 
@@ -48,7 +48,7 @@ def get_config():
         'reward_lr': 3e-4,
         'mimic_sgd': False,
         'sampling_scheme': 'reuse',
-        'mix_coef': 0.01,
+        'mix_coef': 0.1,
         'use_shared_reward': False,
         'use_shared_value': False,
         'no_rewards_in_meta': False
