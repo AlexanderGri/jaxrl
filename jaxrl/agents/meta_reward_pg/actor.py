@@ -6,21 +6,19 @@ import jax
 
 from jaxrl.datasets import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
-from jaxrl.networks.critic_net import RewardAndCritics
+from jaxrl.networks.critic_net import RewardAndCriticsModel
 from jaxrl.agents.meta_reward_pg.critic import compute_returns, compute_returns_multiagent
 
 
 @functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_importance_sampling',))
-def get_actor_loss(actor: Model, actor_params, advantages: jnp.ndarray, data: PaddedTrajectoryData,
+def get_actor_loss(actor: Model, advantages: jnp.ndarray, data: PaddedTrajectoryData,
                    entropy_coef: float, use_recurrent_policy: bool, use_importance_sampling: bool = False,
                    init_carry: Optional[jnp.ndarray] = None) -> Tuple[jnp.ndarray, InfoDict]:
 
     if use_recurrent_policy:
-        _, dist = actor.apply_fn({'params': actor_params},
-                                 init_carry, data.observations, data.available_actions, )
+        _, dist = actor(init_carry, data.observations, data.available_actions,)
     else:
-        dist = actor.apply_fn({'params': actor_params},
-                              data.observations, data.available_actions)
+        dist = actor(data.observations, data.available_actions)
     log_probs = dist.log_prob(data.actions)
     if use_importance_sampling:
         old_log_probs = data.log_prob
@@ -68,20 +66,20 @@ def get_statistics(arr: jnp.array):
     return info
 
 
-def update_intrinsic(actor: Model, intrinsic_critics: Model, intrinsic_critics_params: Params,
-                     data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-                     length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
-                     use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
-    all_meta_rewards = intrinsic_critics.apply_fn({'params': intrinsic_critics_params}, data.states,
-                                                  method=RewardAndCritics.get_rewards)
+def update(actor: Model, intrinsic: RewardAndCriticsModel,
+           data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
+           length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
+           use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
+    all_meta_rewards = intrinsic.get_rewards(data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
     meta_rewards = all_meta_rewards[indices]
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
-    values = intrinsic_critics(data.states, method=RewardAndCritics.get_values)
-    next_values = intrinsic_critics(data.next_states, method=RewardAndCritics.get_values)
+    values = intrinsic.get_values(data.states)
+    next_values = intrinsic.get_values(data.next_states)
     advantages = compute_advantage(mixed_rewards, data.is_ended, values, next_values, discount, length, use_mc_return)
+
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        return get_actor_loss(actor, actor_params, advantages,
+        return get_actor_loss(actor.replace(params=actor_params), advantages,
                               data, entropy_coef=entropy_coef,
                               use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
 

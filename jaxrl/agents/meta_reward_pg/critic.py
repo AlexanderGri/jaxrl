@@ -1,12 +1,11 @@
-import functools
-from typing import Tuple, List
+from typing import Tuple
 
 import jax.numpy as jnp
 import jax
 
 from jaxrl.datasets import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
-from jaxrl.networks.critic_net import StateValueCritic, RewardAndCritics
+from jaxrl.networks.critic_net import RewardAndCriticsModel
 
 
 def _compute_returns(rewards: jnp.ndarray,
@@ -54,17 +53,16 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
     return new_critic, info
 
 
-def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
-                       discount: float, length: int, mix_coef: float) -> Tuple[Model, InfoDict]:
-    last_values = intrinsic_critics(data.next_states[:, -1], method=RewardAndCritics.get_values)
-    all_meta_rewards = intrinsic_critics(data.states, method=RewardAndCritics.get_rewards)
+def update_intrinsic(intrinsic: RewardAndCriticsModel, data: PaddedTrajectoryData,
+                     discount: float, length: int, mix_coef: float) -> Tuple[RewardAndCriticsModel, InfoDict]:
+    last_values = intrinsic.get_values(data.next_states[:, -1])
+    all_meta_rewards = intrinsic.get_rewards(data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
     meta_rewards = all_meta_rewards[indices]
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
 
-    def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        values_multiagent = intrinsic_critics.apply_fn({'params': critic_params}, data.states,
-                                                       method=RewardAndCritics.get_values)
+    def critic_loss_fn(params_critic: Params) -> Tuple[jnp.ndarray, InfoDict]:
+        values_multiagent = intrinsic.replace(params_critic=params_critic).get_values(data.states)
         returns_multiagent = compute_returns_multiagent(mixed_rewards,
                                                         data.is_ended,
                                                         last_values,
@@ -81,6 +79,5 @@ def get_grad_intrinsic(intrinsic_critics: Model, data: PaddedTrajectoryData,
             **{f'v{i}': mean_v for i, mean_v in enumerate(mean_values_per_agent)}
         }
 
-    (_, info), grad = jax.value_and_grad(critic_loss_fn, has_aux=True)(intrinsic_critics.params)
-
-    return grad, info
+    new_intrinsic, info = intrinsic.apply_gradient_critic(critic_loss_fn)
+    return new_intrinsic, info

@@ -45,9 +45,9 @@ def get_config():
         'actor_hidden_dims': (128, 128)
     }
     config.meta_kwargs = {
+        'reward_lr': 3e-4,
         'mimic_sgd': False,
         'sampling_scheme': 'reuse',
-        'acc_intrinsic_grads': False,
         'mix_coef': 0.01,
         'use_shared_reward': False,
         'use_shared_value': False,
