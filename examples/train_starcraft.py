@@ -52,27 +52,19 @@ def main(_):
     else:
         replay_dir = None
 
-    if FLAGS.config.one_hot_to_observations:
-        agents_obs_fun = lambda agents_obs: np.concatenate((agents_obs, np.eye(agents_obs.shape[0])), axis=1)
-    else:
-        agents_obs_fun = None
-
     env_kwargs = {'map_name': config.map_name,
                   'replay_dir': replay_dir,
                   'reward_only_positive': config.reward_only_positive,
                   'continuing_episode': True}
 
     envs = SubprocVecStarcraft(num_envs=config.num_envs,
-                               agents_obs_fun=agents_obs_fun,
+                               one_hot_to_observations=config.one_hot_to_observations,
                                **env_kwargs)
 
     env_info = envs.get_info()
     dummy_states_batch = np.ones((1, 1, env_info['state_dim']))
-    if FLAGS.config.one_hot_to_observations:
-        obs_shape = env_info['obs_dim'] + env_info['n_agents']
-    else:
-        obs_shape = env_info['obs_dim']
-    dummy_observations_batch = np.ones((1, 1, env_info['n_agents'], obs_shape))
+    obs_dim = env_info['obs_dim']
+    dummy_observations_batch = np.ones((1, 1, env_info['n_agents'], obs_dim))
     dummy_available_actions_batch = np.zeros((1, 1, env_info['n_agents'], env_info["n_actions"],), dtype=bool)
 
     np.random.seed(config.seed)

@@ -11,13 +11,10 @@ from smac.env import StarCraft2Env
 
 
 class SubprocVecStarcraft:
-    def __init__(self, num_envs: int, start_method='forkserver', agents_obs_fun=None, **env_kwargs) -> None:
+    def __init__(self, num_envs: int, start_method='forkserver', one_hot_to_observations=True, **env_kwargs) -> None:
         self.waiting = False
         self.closed = False
         self.num_envs = num_envs
-
-        if agents_obs_fun is None:
-            self.agents_obs_fun = lambda x: x
 
         env_fns = [partial(StarCraft2Env, **env_kwargs) for _ in range(num_envs)]
 
@@ -35,7 +32,13 @@ class SubprocVecStarcraft:
 
         env_info = self.env_method('get_env_info')[0]
 
-        self.obs_dim = env_info['obs_shape']
+        if one_hot_to_observations:
+            self.agents_obs_fun = lambda agents_obs: np.concatenate((agents_obs, np.eye(agents_obs.shape[0])), axis=1)
+            self.obs_dim = env_info['obs_shape'] + env_info['n_agents']
+        else:
+            self.agents_obs_fun = lambda x: x
+            self.obs_dim = env_info['obs_shape']
+
         self.state_dim = env_info['state_shape']
         self.n_actions = env_info['n_actions']
         self.n_agents = env_info['n_agents']
