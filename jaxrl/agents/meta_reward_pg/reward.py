@@ -27,12 +27,13 @@ def update(prev_actor: Model, intrinsic: RewardAndCriticsModel, extrinsic_critic
     def reward_loss_fn(params_reward: Params) -> Tuple[jnp.ndarray, InfoDict]:
         actor, _ = update_actor(prev_actor, intrinsic.replace(params_reward=params_reward),
                                 prev_data, discount, entropy_coef, mix_coef,
-                                length, use_recurrent_policy, init_carry)
+                                length, use_recurrent_policy, init_carry, use_mc_return)
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
-        advantages = compute_advantage(rewards, data.is_ended,  values, next_values, discount, use_mc_return)
-        return get_actor_loss(actor, actor.params, advantages,
+        advantages = compute_advantage(rewards, data.is_ended,  values, next_values,
+                                       discount=discount, length=length, use_mc_return=use_mc_return)
+        return get_actor_loss(actor, advantages,
                               outer_update_data, entropy_coef=0.,
                               use_recurrent_policy=use_recurrent_policy,
                               use_importance_sampling=use_importance_sampling,
