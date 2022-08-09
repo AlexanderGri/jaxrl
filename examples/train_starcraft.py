@@ -84,7 +84,7 @@ def main(_):
                           dummy_available_actions_batch,
                           env_info["n_actions"],
                           env_info["time_limit"],
-                          env_info["n_agents"]
+                          env_info["n_agents"],
                           **config.learner_kwargs)
 
     if config.model_load_path != '':
