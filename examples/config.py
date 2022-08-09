@@ -21,7 +21,6 @@ def get_config():
     config.num_trajectories_per_env_per_update = 1
 
     config.use_recurrent_policy = True
-    config.use_meta_rewards = True
     config.one_hot_to_observations = True
     config.stop_agent_training_at = -1
     config.use_mc_return = False
@@ -51,7 +50,6 @@ def get_config():
         'mix_coef': 0.1,
         'use_shared_reward': False,
         'use_shared_value': False,
-        'no_rewards_in_meta': False
     }
 
     return config

@@ -39,10 +39,8 @@ def main(_):
     else:
         config.learner_kwargs.update(config.policy_kwargs)
         config.learner_kwargs.use_recurrent_policy = False
-    if config.use_meta_rewards:
-        if not config.meta_kwargs.no_rewards_in_meta:
-            config.learner_kwargs.update(config.meta_kwargs)
-            delattr(config.learner_kwargs, 'no_rewards_in_meta')
+
+    config.learner_kwargs.update(config.meta_kwargs)
     FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
 
     summary_writer = SummaryWriter(os.path.join(config.save_dir, 'tb'))
@@ -80,24 +78,14 @@ def main(_):
     np.random.seed(config.seed)
     random.seed(config.seed)
 
-
-    learner_kwargs = dict(config.learner_kwargs)
-    if config.use_meta_rewards:
-        if config.meta_kwargs.no_rewards_in_meta:
-            Learner = MetaNoRewardPGLearner
-        else:
-            Learner = MetaPGLearner
-            learner_kwargs["n_agents"] = env_info["n_agents"]
-    else:
-        Learner = PGLearner
-
-    agent = Learner(config.seed,
-                    dummy_states_batch,
-                    dummy_observations_batch,
-                    dummy_available_actions_batch,
-                    env_info["n_actions"],
-                    env_info["time_limit"],
-                    **learner_kwargs)
+    agent = MetaPGLearner(config.seed,
+                          dummy_states_batch,
+                          dummy_observations_batch,
+                          dummy_available_actions_batch,
+                          env_info["n_actions"],
+                          env_info["time_limit"],
+                          env_info["n_agents"]
+                          **config.learner_kwargs)
 
     if config.model_load_path != '':
         agent.load(config.model_load_path)
@@ -120,27 +108,22 @@ def main(_):
         gt.stamp('collect_data')
         step_counter.update(rollout_info['iter_steps'])
         it += 1
-        if config.use_meta_rewards:
-            if config.meta_kwargs.no_rewards_in_meta:
-                update_info = agent.update(prev_data, data)
-                prev_data = data
-            else:
-                update_only_intrinsic = (FLAGS.config.stop_agent_training_at != -1) and \
-                                        (FLAGS.config.stop_agent_training_at < step_counter.total_steps)
-                update_info = agent.update_except_actor(prev_data, data, prev_actor,
-                                                        update_only_intrinsic)
-                if update_only_intrinsic:
-                    agent.actor = prev_actor
-                    prev_data, _ = collect_trajectories(envs, agent,
-                                                        num_trajectories_per_env=config.num_trajectories_per_env_per_update)
-                    update_info_actor = agent.update_actor(prev_data)
-                else:
-                    prev_actor = agent.actor
-                    update_info_actor = agent.update_actor(data)
-                    prev_data = data
-                update_info.update(update_info_actor)
+
+        update_only_intrinsic = (FLAGS.config.stop_agent_training_at != -1) and \
+                                (FLAGS.config.stop_agent_training_at < step_counter.total_steps)
+        update_info = agent.update_except_actor(prev_data, data, prev_actor,
+                                                update_only_intrinsic)
+        if update_only_intrinsic:
+            agent.actor = prev_actor
+            prev_data, _ = collect_trajectories(envs, agent,
+                                                num_trajectories_per_env=config.num_trajectories_per_env_per_update)
+            update_info_actor = agent.update_actor(prev_data)
         else:
-            update_info = agent.update(data)
+            prev_actor = agent.actor
+            update_info_actor = agent.update_actor(data)
+            prev_data = data
+        update_info.update(update_info_actor)
+
         gt.stamp('train')
 
         if step_counter.check_key('log'):
