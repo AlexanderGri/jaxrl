@@ -17,14 +17,10 @@ def collect_trajectories(envs: SubprocVecStarcraft, agent: MetaPGLearner,
     all_end_info = {}
     total_steps = 0
     for _ in range(num_trajectories_per_env):
-        try:
-            jax_data, end_info, num_steps = collect_one_trajectory_per_env(envs, agent,
-                                                                           save_replay=save_replay,
-                                                                           replay_prefix=replay_prefix,
-                                                                           distribution=distribution)
-        except Exception:
-            envs.close()
-            raise
+        jax_data, end_info, num_steps = collect_one_trajectory_per_env(envs, agent,
+                                                                       save_replay=save_replay,
+                                                                       replay_prefix=replay_prefix,
+                                                                       distribution=distribution)
 
         datas.append(jax_data)
         for k, v in end_info.items():
