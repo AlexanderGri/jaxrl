@@ -11,14 +11,21 @@ from smac.env import StarCraft2Env
 
 
 class SubprocVecStarcraft:
-    def __init__(self, num_envs: int, start_method='forkserver', one_hot_to_observations=True, **env_kwargs) -> None:
+    def __init__(self, num_envs: int, start_method=None, one_hot_to_observations=True, **env_kwargs) -> None:
         self.waiting = False
         self.closed = False
         self.num_envs = num_envs
 
         env_fns = [partial(StarCraft2Env, **env_kwargs) for _ in range(num_envs)]
 
+        if start_method is None:
+            # Fork is not a thread safe method (see issue #217)
+            # but is more user friendly (does not require to wrap the code in
+            # a `if __name__ == "__main__":`)
+            forkserver_available = 'forkserver' in multiprocessing.get_all_start_methods()
+            start_method = 'forkserver' if forkserver_available else 'spawn'
         ctx = multiprocessing.get_context(start_method)
+
         self.remotes, self.work_remotes = zip(*[ctx.Pipe(duplex=True) for _ in range(num_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes, env_fns):
