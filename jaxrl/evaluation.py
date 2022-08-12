@@ -13,13 +13,15 @@ def collect_trajectories(envs: SubprocVecStarcraft, agent: MetaPGLearner,
                          num_trajectories_per_env,
                          save_replay: bool = False, replay_prefix: str = None,
                          distribution='log_prob') -> Tuple[PaddedTrajectoryData, dict]:
+    if save_replay:
+        envs.env_method('save_replay')
+    envs.set_attr('replay_prefix', replay_prefix)
+
     datas = []
     all_end_info = {}
     total_steps = 0
     for _ in range(num_trajectories_per_env):
         jax_data, end_info, num_steps = collect_one_trajectory_per_env(envs, agent,
-                                                                       save_replay=save_replay,
-                                                                       replay_prefix=replay_prefix,
                                                                        distribution=distribution)
 
         datas.append(jax_data)
@@ -36,12 +38,7 @@ def collect_trajectories(envs: SubprocVecStarcraft, agent: MetaPGLearner,
 
 
 def collect_one_trajectory_per_env(envs: SubprocVecStarcraft, agent: MetaPGLearner,
-                                   save_replay: bool = False, replay_prefix: str = None,
                                    distribution='log_prob') -> Tuple[PaddedTrajectoryData, dict, int]:
-    if save_replay:
-        envs.env_method('save_replay')
-    envs.set_attr('replay_prefix', replay_prefix)
-
     data = init_data(n_trajectories=envs.num_envs,
                      time_limit=envs.time_limit,
                      n_agents=envs.n_agents,
