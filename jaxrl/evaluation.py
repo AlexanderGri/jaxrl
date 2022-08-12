@@ -4,8 +4,8 @@ import numpy as np
 
 import jax.numpy as jnp
 
-from jaxrl.agents import MetaPGLearner
-from jaxrl.datasets.dataset import PaddedTrajectoryData, concatenate, init_data
+from jaxrl.algorithm import MetaPGLearner
+from jaxrl.data import PaddedTrajectoryData, concatenate, init_data
 from jaxrl.vec_env import SubprocVecStarcraft
 
 

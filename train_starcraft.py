@@ -11,7 +11,7 @@ from absl import app, flags
 from ml_collections import config_flags
 from tensorboardX import SummaryWriter
 
-from jaxrl.agents import PGLearner, MetaPGLearner, MetaNoRewardPGLearner
+from jaxrl.algorithm import MetaPGLearner
 from jaxrl.evaluation import collect_trajectories
 from jaxrl.utils import StepCounter
 from jaxrl.vec_env import SubprocVecStarcraft
@@ -39,10 +39,11 @@ def main(_):
     else:
         config.learner_kwargs.update(config.policy_kwargs)
         config.learner_kwargs.use_recurrent_policy = False
-
     config.learner_kwargs.update(config.meta_kwargs)
-    FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
 
+    if not os.path.exists(config.save_dir):
+        os.makedirs(config.save_dir)
+    FLAGS.append_flags_into_file(os.path.join(config.save_dir, 'flags'))
     summary_writer = SummaryWriter(os.path.join(config.save_dir, 'tb'))
 
     if config.save_replay:

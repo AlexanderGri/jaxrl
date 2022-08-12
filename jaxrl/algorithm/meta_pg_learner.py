@@ -8,11 +8,11 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jaxrl.agents.meta_reward_pg.actor import update as update_actor
-from jaxrl.agents.meta_reward_pg.critic import update_intrinsic as update_intrinsic_critic
-from jaxrl.agents.meta_reward_pg.critic import update_extrinsic as update_extrinsic_critic
-from jaxrl.agents.meta_reward_pg.reward import update as update_reward
-from jaxrl.datasets import PaddedTrajectoryData
+from jaxrl.algorithm.actor import update as update_actor
+from jaxrl.algorithm.critic import update_intrinsic as update_intrinsic_critic
+from jaxrl.algorithm.critic import update_extrinsic as update_extrinsic_critic
+from jaxrl.algorithm.reward import update as update_reward
+from jaxrl.data import PaddedTrajectoryData
 from jaxrl.networks import critic_net, policies
 from jaxrl.networks.critic_net import RewardAndCriticsModel
 from jaxrl.networks.common import InfoDict, Model, GRU

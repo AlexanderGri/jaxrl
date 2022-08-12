@@ -3,7 +3,7 @@ from typing import Tuple
 import jax.numpy as jnp
 import jax
 
-from jaxrl.datasets import PaddedTrajectoryData
+from jaxrl.data import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
 from jaxrl.networks.critic_net import RewardAndCriticsModel
 
@@ -12,12 +12,12 @@ def _compute_returns(rewards: jnp.ndarray,
                      done: bool,
                      last_value: float,
                      discount: float,
-                     length: int) -> jnp.ndarray:
+                     time_limit: int) -> jnp.ndarray:
     # +1 because of last observation value
-    coef = discount ** jnp.arange(length + 1)[::-1]
+    coef = discount ** jnp.arange(time_limit + 1)[::-1]
     # if done last_value is not needed
     rewards_with_last_value = jnp.append(rewards, last_value * (1. - done))
-    discounted_returns = jnp.convolve(rewards_with_last_value, coef, mode='full')[length:-1]
+    discounted_returns = jnp.convolve(rewards_with_last_value, coef, mode='full')[time_limit:-1]
     return discounted_returns
 
 
@@ -30,13 +30,13 @@ compute_returns_multiagent = jax.vmap(compute_returns, in_axes=(2, None, 1, None
 
 
 def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
-                     discount: float, length: int) -> Tuple[Model, InfoDict]:
+                     discount: float, time_limit: int) -> Tuple[Model, InfoDict]:
     last_values = extrinsic_critic(data.next_states[:, -1])
     target_values = compute_returns(data.rewards,
                                     data.is_ended,
                                     last_values,
                                     discount,
-                                    length)
+                                    time_limit)
 
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         values = extrinsic_critic.apply_fn({'params': critic_params}, data.states)
@@ -54,7 +54,7 @@ def update_extrinsic(extrinsic_critic: Model, data: PaddedTrajectoryData,
 
 
 def update_intrinsic(intrinsic: RewardAndCriticsModel, data: PaddedTrajectoryData,
-                     discount: float, length: int, mix_coef: float) -> Tuple[RewardAndCriticsModel, InfoDict]:
+                     discount: float, time_limit: int, mix_coef: float) -> Tuple[RewardAndCriticsModel, InfoDict]:
     last_values = intrinsic.get_values(data.next_states[:, -1])
     all_meta_rewards = intrinsic.get_rewards(data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
@@ -67,7 +67,7 @@ def update_intrinsic(intrinsic: RewardAndCriticsModel, data: PaddedTrajectoryDat
                                                         data.is_ended,
                                                         last_values,
                                                         discount,
-                                                        length)
+                                                        time_limit)
         critic_loss = (values_multiagent - returns_multiagent)**2
         # here several ways of normalizing are possible
         agents_alive_normalized = data.agents_alive / data.agents_alive.sum()

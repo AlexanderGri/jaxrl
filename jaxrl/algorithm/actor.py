@@ -4,10 +4,10 @@ from typing import Tuple, Optional
 import jax.numpy as jnp
 import jax
 
-from jaxrl.datasets import PaddedTrajectoryData
+from jaxrl.data import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
 from jaxrl.networks.critic_net import RewardAndCriticsModel
-from jaxrl.agents.meta_reward_pg.critic import compute_returns, compute_returns_multiagent
+from jaxrl.algorithm.critic import compute_returns, compute_returns_multiagent
 
 
 @functools.partial(jax.jit, static_argnames=('use_recurrent_policy', 'use_importance_sampling',))

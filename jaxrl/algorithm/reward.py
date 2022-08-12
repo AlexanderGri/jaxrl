@@ -2,11 +2,11 @@ from typing import Tuple, Optional
 
 import jax.numpy as jnp
 
-from jaxrl.datasets import PaddedTrajectoryData
+from jaxrl.data import PaddedTrajectoryData
 from jaxrl.networks.common import InfoDict, Model, Params
 from jaxrl.networks.critic_net import RewardAndCriticsModel
-from jaxrl.agents.meta_reward_pg.actor import update as update_actor
-from jaxrl.agents.meta_reward_pg.actor import get_actor_loss, compute_advantage
+from jaxrl.algorithm.actor import update as update_actor
+from jaxrl.algorithm.actor import get_actor_loss, compute_advantage
 
 
 def update(prev_actor: Model, intrinsic: RewardAndCriticsModel, extrinsic_critic: Model,

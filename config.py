@@ -17,7 +17,7 @@ def get_config():
     config.map_name = '2s3z'
     config.reward_only_positive = False
     config.seed = 45
-    config.num_envs = 5
+    config.num_envs = 1
     config.num_trajectories_per_env_per_update = 1
 
     config.use_recurrent_policy = True
