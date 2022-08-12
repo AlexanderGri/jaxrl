@@ -86,10 +86,6 @@ class Logger:
         self.step_counter.update(counts)
         self.it += 1
 
-    def if_update_only_reward(self) -> bool:
-        return (self.config.stop_agent_training_at != -1) and \
-               (self.config.stop_agent_training_at < self.step_counter.total_steps)
-
     def log_periodically(self, update_info: dict, rollout_info: dict):
         if self.step_counter.check_key('log'):
             time_report_raw = gt.report(include_stats=False,

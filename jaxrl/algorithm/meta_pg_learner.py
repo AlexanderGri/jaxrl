@@ -220,24 +220,25 @@ class MetaPGLearner(object):
 
     def update_actor(self, data: PaddedTrajectoryData) -> InfoDict:
         kwargs = self.get_actor_update_kwargs(n_trajectories=data.actions.shape[0])
-        self.actor, info = _update_actor_jit(self.actor, self.intrinsic, data, **kwargs)
+        self.actor, info = _update_actor_jit(actor=self.actor, intrinsic=self.intrinsic, data=data,
+                                             **kwargs)
         return info
 
     def update_except_actor(self, prev_data: PaddedTrajectoryData,
-                            data: PaddedTrajectoryData, prev_actor: Model,
-                            update_only_reward: bool = False) -> InfoDict:
-        if prev_data is None or prev_actor is None:
-            return {}
-
-        args = (prev_actor, self.intrinsic, self.extrinsic_critic, prev_data, data)
+                            data: PaddedTrajectoryData, prev_actor: Model) -> InfoDict:
         kwargs = self.get_actor_update_kwargs(n_trajectories=data.actions.shape[0])
+        self.extrinsic_critic, self.intrinsic, info = \
+            _update_except_actor_jit(prev_data=prev_data, data=data, prev_actor=prev_actor,
+                                     intrinsic=self.intrinsic, extrinsic_critic=self.extrinsic_critic,
+                                     **kwargs, sampling_scheme=self.sampling_scheme)
+        return info
 
-        if update_only_reward:
-            self.intrinsic, info = _update_reward_jit(*args, **kwargs,
-                                                      sampling_scheme=self.sampling_scheme)
-        else:
-            self.extrinsic_critic, self.intrinsic, info = _update_except_actor_jit(*args, **kwargs,
-                                                                                   sampling_scheme=self.sampling_scheme)
+    def update_only_reward(self, prev_data: PaddedTrajectoryData,
+                           data: PaddedTrajectoryData, prev_actor: Model) -> InfoDict:
+        kwargs = self.get_actor_update_kwargs(n_trajectories=data.actions.shape[0])
+        self.intrinsic, info = _update_reward_jit(prev_data=prev_data, data=data, prev_actor=prev_actor,
+                                                  intrinsic=self.intrinsic, extrinsic_critic=self.extrinsic_critic,
+                                                  **kwargs, sampling_scheme=self.sampling_scheme)
         return info
 
     def initialize_carry(self, n_trajectories):

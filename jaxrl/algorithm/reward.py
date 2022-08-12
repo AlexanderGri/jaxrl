@@ -14,7 +14,7 @@ def update(prev_actor: Model, intrinsic: RewardAndCriticsModel, extrinsic_critic
            discount: float, entropy_coef: float, mix_coef: float, time_limit: int,
            use_recurrent_policy: bool, sampling_scheme: str, init_carry: Optional[jnp.ndarray] = None,
            use_mc_return: bool = False) -> Tuple[RewardAndCriticsModel, InfoDict]:
-    if sampling_scheme == 'reuse':
+    if sampling_scheme == 'reuse' or sampling_scheme == 'double':
         outer_update_data = data
         use_importance_sampling = False
     elif sampling_scheme == 'importance_sampling':

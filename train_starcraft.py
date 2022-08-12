@@ -35,7 +35,7 @@ def main(_):
     env_kwargs = {'map_name': config.map_name,
                   'replay_dir': logger.get_replay_dir(),
                   'reward_only_positive': config.reward_only_positive,
-                  'continuing_episode': True}
+                  'continuing_episode': config.continuing_episode}
 
     envs = SubprocVecStarcraft(num_envs=config.num_envs,
                                one_hot_to_observations=config.one_hot_to_observations,
@@ -63,29 +63,67 @@ def main(_):
     gt.rename_root('RL_algorithm')
     gt.set_def_unique(False)
 
+    assert (not config.update_only_reward) or config.meta_kwargs.sampling_scheme == 'double'
+    if config.meta_kwargs.sampling_scheme == 'reuse' or config.meta_kwargs.sampling_scheme == 'importance_sampling':
+        train_one_batch_per_update(envs, agent, logger)
+    elif config.meta_kwargs.sampling_scheme == 'double':
+        train_two_batches_per_update(envs, agent, logger)
+
+
+def train_one_batch_per_update(envs, agent, logger):
     prev_data = None
     prev_actor = None
     while logger.if_not_exausted():
         data, rollout_info = collect_trajectories(envs, agent,
-                                                  num_trajectories_per_env=config.num_trajectories_per_env_per_update,
+                                                  num_trajectories_per_env=logger.config.num_trajectories_per_env_per_update,
                                                   save_replay=logger.if_save_replay(),
                                                   replay_prefix=logger.get_replay_prefix())
         logger.update_counts(rollout_info['iter_steps'])
         gt.stamp('collect_data')
 
-        update_only_reward = logger.if_update_only_reward()
-        update_info = agent.update_except_actor(prev_data, data, prev_actor, update_only_reward)
-        if update_only_reward:
-            agent.actor = prev_actor
-            prev_data, _ = collect_trajectories(envs, agent,
-                                                num_trajectories_per_env=config.num_trajectories_per_env_per_update)
-            update_info_actor = agent.update_actor(prev_data)
+        if prev_data is None:
+            update_info = {}
         else:
-            prev_actor = agent.actor
-            update_info_actor = agent.update_actor(data)
-            prev_data = data
+            update_info = agent.update_except_actor(prev_data=prev_data, data=data, prev_actor=prev_actor)
+        gt.stamp('train_except_actor')
+
+        prev_actor = agent.actor
+        prev_data = data
+        update_info_actor = agent.update_actor(data)
         update_info.update(update_info_actor)
-        gt.stamp('train')
+        gt.stamp('train_actor')
+
+        logger.log_periodically(update_info, rollout_info)
+        logger.eval_periodically(envs, agent)
+        logger.save_periodically(agent)
+
+
+def train_two_batches_per_update(envs, agent, logger):
+    freezed_actor = agent.actor
+    while logger.if_not_exausted():
+        if logger.config.update_only_reward:
+            agent.actor = freezed_actor
+        prev_actor = agent.actor
+        prev_data, prev_rollout_info = collect_trajectories(envs, agent,
+                                                            num_trajectories_per_env=logger.config.num_trajectories_per_env_per_update,
+                                                            save_replay=logger.if_save_replay(),
+                                                            replay_prefix=logger.get_replay_prefix())
+        gt.stamp('collect_data')
+
+        update_info_actor = agent.update_actor(prev_data)
+        gt.stamp('train_actor')
+
+        data, rollout_info = collect_trajectories(envs, agent,
+                                                  num_trajectories_per_env=logger.config.num_trajectories_per_env_per_update)
+        logger.update_counts(prev_rollout_info['iter_steps'] + rollout_info['iter_steps'])
+        gt.stamp('collect_data')
+
+        if logger.config.update_only_reward:
+            update_info = agent.update_only_reward(prev_data=prev_data, data=data, prev_actor=prev_actor)
+        else:
+            update_info = agent.update_except_actor(prev_data=prev_data, data=data, prev_actor=prev_actor)
+        update_info.update(update_info_actor)
+        gt.stamp('train_except_actor')
 
         logger.log_periodically(update_info, rollout_info)
         logger.eval_periodically(envs, agent)

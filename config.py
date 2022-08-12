@@ -16,13 +16,14 @@ def get_config():
 
     config.map_name = '2s3z'
     config.reward_only_positive = False
+    config.continuing_episode = True
     config.seed = 45
     config.num_envs = 1
     config.num_trajectories_per_env_per_update = 1
 
     config.use_recurrent_policy = True
     config.one_hot_to_observations = True
-    config.stop_agent_training_at = -1
+    config.update_only_reward = False
     config.use_mc_return = False
 
 
