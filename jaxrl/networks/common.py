@@ -110,19 +110,9 @@ class Model:
     def apply_gradient(
             self,
             loss_fn: Optional[Callable[[Params], Any]] = None,
-            grads: Optional[Any] = None,
             has_aux: bool = True) -> Union[Tuple['Model', Any], 'Model']:
-        assert (loss_fn is not None or grads is not None,
-                'Either a loss function or grads must be specified.')
-        if grads is None:
-            grad_fn = jax.grad(loss_fn, has_aux=has_aux)
-            if has_aux:
-                grads, aux = grad_fn(self.params)
-            else:
-                grads = grad_fn(self.params)
-        else:
-            assert (has_aux,
-                    'When grads are provided, expects no aux outputs.')
+        grad_fn = jax.grad(loss_fn, has_aux=has_aux)
+        grads, aux = grad_fn(self.params)
 
         updates, new_opt_state = self.tx.update(grads, self.opt_state,
                                                 self.params)
@@ -139,19 +129,20 @@ class Model:
     def get_attr_names(self):
         return ['params', 'opt_state']
 
-    def save(self, save_path: str):
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        attr_names = self.get_attr_names()
-        for attr_name in attr_names:
-            with open(save_path + '_' + attr_name, 'wb') as f:
-                f.write(flax.serialization.to_bytes(getattr(self, attr_name)))
 
-    def load(self, load_path: str) -> 'Model':
-        attr_names = self.get_attr_names()
-        attr_values = []
-        for attr_name in attr_names:
-            with open(load_path + '_' + attr_name, 'rb') as f:
-                attr_value = flax.serialization.from_bytes(getattr(self, attr_name), f.read())
-                attr_values.append(attr_value)
-        return self.replace(**dict(zip(attr_names, attr_values)))
+def save_model(model, save_path: str):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    attr_names = model.get_attr_names()
+    for attr_name in attr_names:
+        with open(save_path + '_' + attr_name, 'wb') as f:
+            f.write(flax.serialization.to_bytes(getattr(model, attr_name)))
 
+
+def load_model(model, load_path: str) -> 'Model':
+    attr_names = model.get_attr_names()
+    attr_values = []
+    for attr_name in attr_names:
+        with open(load_path + '_' + attr_name, 'rb') as f:
+            attr_value = flax.serialization.from_bytes(getattr(model, attr_name), f.read())
+            attr_values.append(attr_value)
+    return model.replace(**dict(zip(attr_names, attr_values)))

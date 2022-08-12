@@ -159,10 +159,8 @@ class RewardAndCriticsModel:
 
     def apply_gradient_reward(
             self,
-            loss_fn: Optional[Callable[[Params], Any]] = None,
-            grads: Optional[Any] = None) -> Tuple['RewardAndCriticsModel', Any]:
-        assert (loss_fn is not None or grads is not None,
-                'Either a loss function or grads must be specified.')
+            loss_fn: Optional[Callable[[Params], Any]] = None) \
+            -> Tuple['RewardAndCriticsModel', Any]:
         new_params, new_opt_state, aux = compute_update(self.params_reward, self.tx_reward, self.opt_state_reward,
                                                         loss_fn)
         new_model = self.replace(step=self.step + 1,
@@ -172,10 +170,8 @@ class RewardAndCriticsModel:
 
     def apply_gradient_critic(
             self,
-            loss_fn: Optional[Callable[[Params], Any]] = None,
-            grads: Optional[Any] = None) -> Tuple['RewardAndCriticsModel', Any]:
-        assert (loss_fn is not None or grads is not None,
-                'Either a loss function or grads must be specified.')
+            loss_fn: Optional[Callable[[Params], Any]] = None) \
+            -> Tuple['RewardAndCriticsModel', Any]:
         new_params, new_opt_state, aux = compute_update(self.params_critic, self.tx_critic, self.opt_state_critic,
                                                         loss_fn)
         new_model = self.replace(step=self.step + 1,
@@ -185,19 +181,3 @@ class RewardAndCriticsModel:
 
     def get_attr_names(self):
         return ['params_critic', 'params_reward', 'opt_state_critic', 'opt_state_reward']
-
-    def save(self, save_path: str):
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        attr_names = self.get_attr_names()
-        for attr_name in attr_names:
-            with open(save_path + '_' + attr_name, 'wb') as f:
-                f.write(flax.serialization.to_bytes(getattr(self, attr_name)))
-
-    def load(self, load_path: str) -> 'RewardAndCriticsModel':
-        attr_names = self.get_attr_names()
-        attr_values = []
-        for attr_name in attr_names:
-            with open(load_path + '_' + attr_name, 'rb') as f:
-                attr_value = flax.serialization.from_bytes(getattr(self, attr_name), f.read())
-                attr_values.append(attr_value)
-        return self.replace(**dict(zip(attr_name, attr_values)))

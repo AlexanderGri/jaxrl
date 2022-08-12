@@ -25,19 +25,18 @@ def update(prev_actor: Model, intrinsic: RewardAndCriticsModel, extrinsic_critic
         use_importance_sampling = None
 
     def reward_loss_fn(params_reward: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        actor, _ = update_actor(prev_actor, intrinsic.replace(params_reward=params_reward),
-                                prev_data, discount, entropy_coef, mix_coef,
-                                time_limit, use_recurrent_policy, init_carry, use_mc_return)
+        actor, _ = update_actor(actor=prev_actor, intrinsic=intrinsic.replace(params_reward=params_reward),
+                                data=prev_data, discount=discount, entropy_coef=entropy_coef, mix_coef=mix_coef,
+                                time_limit=time_limit, use_recurrent_policy=use_recurrent_policy, init_carry=init_carry,
+                                use_mc_return=use_mc_return)
         values = jnp.expand_dims(extrinsic_critic(data.states), axis=2)
         next_values = jnp.expand_dims(extrinsic_critic(data.next_states), axis=2)
         rewards = jnp.expand_dims(data.rewards, axis=2)
-        advantages = compute_advantage(rewards, data.is_ended,  values, next_values,
+        advantages = compute_advantage(rewards=rewards, dones=data.is_ended,  values=values, next_values=next_values,
                                        discount=discount, time_limit=time_limit, use_mc_return=use_mc_return)
-        return get_actor_loss(actor, advantages,
-                              outer_update_data, entropy_coef=0.,
-                              use_recurrent_policy=use_recurrent_policy,
-                              use_importance_sampling=use_importance_sampling,
-                              init_carry=init_carry,)
+        return get_actor_loss(actor=actor, advantages=advantages, data=outer_update_data,
+                              entropy_coef=0., use_recurrent_policy=use_recurrent_policy,
+                              use_importance_sampling=use_importance_sampling, init_carry=init_carry,)
 
     new_intrinsic, info = intrinsic.apply_gradient_reward(reward_loss_fn)
     return new_intrinsic, info

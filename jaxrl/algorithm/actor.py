@@ -76,12 +76,13 @@ def update(actor: Model, intrinsic: RewardAndCriticsModel,
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic.get_values(data.states)
     next_values = intrinsic.get_values(data.next_states)
-    advantages = compute_advantage(mixed_rewards, data.is_ended, values, next_values, discount, time_limit, use_mc_return)
+    advantages = compute_advantage(rewards=mixed_rewards, dones=data.is_ended, values=values, next_values=next_values,
+                                   discount=discount, time_limit=time_limit, use_mc_return=use_mc_return)
 
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
-        return get_actor_loss(actor.replace(params=actor_params), advantages,
-                              data, entropy_coef=entropy_coef,
-                              use_recurrent_policy=use_recurrent_policy, init_carry=init_carry)
+        return get_actor_loss(actor=actor.replace(params=actor_params), advantages=advantages, data=data,
+                              entropy_coef=entropy_coef, use_recurrent_policy=use_recurrent_policy,
+                              init_carry=init_carry)
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)
     for arr, reward_type in zip([meta_rewards, data.rewards, mixed_rewards],

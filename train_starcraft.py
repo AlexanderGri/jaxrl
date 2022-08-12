@@ -73,9 +73,9 @@ def main(_):
         logger.update_counts(rollout_info['iter_steps'])
         gt.stamp('collect_data')
 
-        update_only_intrinsic = logger.if_update_only_reward()
-        update_info = agent.update_except_actor(prev_data, data, prev_actor, update_only_intrinsic)
-        if update_only_intrinsic:
+        update_only_reward = logger.if_update_only_reward()
+        update_info = agent.update_except_actor(prev_data, data, prev_actor, update_only_reward)
+        if update_only_reward:
             agent.actor = prev_actor
             prev_data, _ = collect_trajectories(envs, agent,
                                                 num_trajectories_per_env=config.num_trajectories_per_env_per_update)
