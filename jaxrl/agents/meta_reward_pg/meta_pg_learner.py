@@ -18,24 +18,24 @@ from jaxrl.networks.critic_net import RewardAndCriticsModel
 from jaxrl.networks.common import InfoDict, Model, GRU
 
 
-@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'use_mc_return'))
+@functools.partial(jax.jit, static_argnames=('time_limit', 'use_recurrent_policy', 'use_mc_return'))
 def _update_actor_jit(actor: Model, intrinsic: RewardAndCriticsModel,
-                      data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float, length: int,
+                      data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float, time_limit: int,
                       use_recurrent_policy: bool, use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[Model, InfoDict]:
     new_actor, actor_info = update_actor(actor,
                                          intrinsic,
                                          data, discount, entropy_coef,
-                                         mix_coef, length, use_recurrent_policy, init_carry,
+                                         mix_coef, time_limit, use_recurrent_policy, init_carry,
                                          use_mc_return)
     return new_actor, actor_info
 
 
-@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme', 'use_mc_return'))
+@functools.partial(jax.jit, static_argnames=('time_limit', 'use_recurrent_policy', 'sampling_scheme', 'use_mc_return'))
 def _update_intrinsic_jit(prev_actor: Model, intrinsic: RewardAndCriticsModel,
                           extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                           data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
-                          length: int, use_recurrent_policy: bool, sampling_scheme: str,
+                          time_limit: int, use_recurrent_policy: bool, sampling_scheme: str,
                           use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[RewardAndCriticsModel, InfoDict]:
     new_intrinsic, reward_info = update_reward(prev_actor,
@@ -46,7 +46,7 @@ def _update_intrinsic_jit(prev_actor: Model, intrinsic: RewardAndCriticsModel,
                                                discount,
                                                entropy_coef,
                                                mix_coef,
-                                               length,
+                                               time_limit,
                                                use_recurrent_policy,
                                                sampling_scheme,
                                                init_carry,
@@ -55,7 +55,7 @@ def _update_intrinsic_jit(prev_actor: Model, intrinsic: RewardAndCriticsModel,
     new_new_intrinsic, critic_info = update_intrinsic_critic(new_intrinsic,
                                                              data,
                                                              discount,
-                                                             length,
+                                                             time_limit,
                                                              mix_coef)
     info = {}
     for d, name in zip([reward_info, critic_info],
@@ -64,21 +64,21 @@ def _update_intrinsic_jit(prev_actor: Model, intrinsic: RewardAndCriticsModel,
     return new_new_intrinsic, info
 
 
-@functools.partial(jax.jit, static_argnames=('length', 'use_recurrent_policy', 'sampling_scheme', 'use_mc_return'))
+@functools.partial(jax.jit, static_argnames=('time_limit', 'use_recurrent_policy', 'sampling_scheme', 'use_mc_return'))
 def _update_except_actor_jit(prev_actor: Model, intrinsic: RewardAndCriticsModel,
                              extrinsic_critic: Model, prev_data: PaddedTrajectoryData,
                              data: PaddedTrajectoryData, discount: float, entropy_coef: float,  mix_coef: float,
-                             length: int, use_recurrent_policy: bool, sampling_scheme: str,
+                             time_limit: int, use_recurrent_policy: bool, sampling_scheme: str,
                              use_mc_return: bool, init_carry: Optional[jnp.ndarray] = None) \
         -> Tuple[Model, RewardAndCriticsModel, InfoDict]:
     new_extrinsic_critic, extrinsic_critic_info = update_extrinsic_critic(extrinsic_critic,
                                                                           data,
                                                                           discount,
-                                                                          length)
+                                                                          time_limit)
 
     new_intrinsic, info = _update_intrinsic_jit(
         prev_actor, intrinsic, new_extrinsic_critic,
-        prev_data, data, discount, entropy_coef, mix_coef, length,
+        prev_data, data, discount, entropy_coef, mix_coef, time_limit,
         use_recurrent_policy, sampling_scheme, use_mc_return, init_carry)
 
     for k, v in extrinsic_critic_info.items():
@@ -93,7 +93,7 @@ class MetaPGLearner(object):
                  observations: jnp.ndarray,
                  available_actions: jnp.ndarray,
                  n_actions: int,
-                 length: int,
+                 time_limit: int,
                  n_agents: int,
                  actor_lr: float = 3e-4,
                  reward_lr: float = 3e-4,
@@ -110,8 +110,7 @@ class MetaPGLearner(object):
                  entropy_coef: float = 1e-3,
                  mix_coef: float = 0.01,
                  sampling_scheme: str = 'reuse',
-                 use_mc_return: bool = False,
-                 mimic_sgd: bool = False):
+                 use_mc_return: bool = False,):
 
         self.discount = discount
         self.entropy_coef = entropy_coef
@@ -120,13 +119,11 @@ class MetaPGLearner(object):
         self.use_mc_return = use_mc_return
         self.actor_lr = actor_lr
         self.optimizer_name = optimizer_name
-        self.mimic_sgd = mimic_sgd
-        self.length = length
+        self.time_limit = time_limit
         self.use_recurrent_policy = use_recurrent_policy
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
         self.n_agents = n_agents
 
-        assert (not mimic_sgd) or (mimic_sgd and sampling_scheme == 'importance_sampling')
         assert use_shared_reward or not use_shared_value
 
         if self.optimizer_name == 'adam':
@@ -198,13 +195,20 @@ class MetaPGLearner(object):
             actions = np.asarray(actions)
             return new_carry, actions, log_prob
 
+    def get_actor_update_kwargs(self, n_trajectories):
+        return {
+            'discount': self.discount,
+            'entropy_coef': self.entropy_coef,
+            'mix_coef': self.mix_coef,
+            'time_limit': self.time_limit,
+            'use_recurrent_policy': self.use_recurrent_policy,
+            'use_mc_return': self.use_mc_return,
+            'init_carry': self.initialize_carry(n_trajectories)
+        }
+
     def update_actor(self, data: PaddedTrajectoryData) -> InfoDict:
-        n_trajectories, _, _ = data.actions.shape
-        init_carry = self.initialize_carry(n_trajectories)
-        new_actor, actor_info = _update_actor_jit(self.actor, self.intrinsic, data,
-                                                  self.discount, self.entropy_coef, self.mix_coef, self.length,
-                                                  self.use_recurrent_policy, self.use_mc_return, init_carry)
-        self.actor = new_actor
+        kwargs = self.get_actor_update_kwargs(n_trajectories=data.actions.shape[0])
+        self.actor, actor_info = _update_actor_jit(self.actor, self.intrinsic, data, **kwargs)
         return {f'inner_{k}': v for k, v in actor_info.items()}
 
     def update_except_actor(self, prev_data: PaddedTrajectoryData,
@@ -212,21 +216,14 @@ class MetaPGLearner(object):
                             update_only_intrinsic: bool = False) -> InfoDict:
         if prev_data is None or prev_actor is None:
             return {}
-        n_trajectories, _, _ = data.actions.shape
-        init_carry = self.initialize_carry(n_trajectories)
 
-        if self.mimic_sgd:
-            tx = optax.sgd(learning_rate=self.actor_lr)
-            opt_state = tx.init(prev_actor.params)
-            prev_actor = prev_actor.replace(tx=tx, opt_state=opt_state)
+        args = (prev_actor, self.intrinsic, self.extrinsic_critic, prev_data, data)
+        kwargs = self.get_actor_update_kwargs(n_trajectories=data.actions.shape[0])
 
-        args = (prev_actor, self.intrinsic, self.extrinsic_critic,
-                prev_data, data, self.discount, self.entropy_coef, self.mix_coef, self.length,
-                self.use_recurrent_policy, self.sampling_scheme, self.use_mc_return, init_carry)
         if update_only_intrinsic:
-            self.intrinsic, info = _update_intrinsic_jit(*args)
+            self.intrinsic, info = _update_intrinsic_jit(*args, **kwargs, sampling_scheme=self.sampling_scheme)
         else:
-            self.extrinsic_critic, self.intrinsic, info = _update_except_actor_jit(*args)
+            self.extrinsic_critic, self.intrinsic, info = _update_except_actor_jit(*args, **kwargs, sampling_scheme=self.sampling_scheme)
         return info
 
     def initialize_carry(self, n_trajectories):

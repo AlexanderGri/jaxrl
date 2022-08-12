@@ -37,10 +37,10 @@ def get_actor_loss(actor: Model, advantages: jnp.ndarray, data: PaddedTrajectory
 
 
 def compute_advantage(rewards: jnp.ndarray, dones: jnp.ndarray, values: jnp.ndarray, next_values: jnp.ndarray,
-                      discount: float, length: int, use_mc_return: bool = False) -> jnp.ndarray:
+                      discount: float, time_limit: int, use_mc_return: bool = False) -> jnp.ndarray:
     if use_mc_return:
         last_values = next_values[:, -1]
-        returns = compute_returns(rewards, dones, last_values, discount, length)
+        returns = compute_returns(rewards, dones, last_values, discount, time_limit)
         advantages = returns - values
     else:
         advantages = rewards + discount * next_values - values
@@ -48,11 +48,11 @@ def compute_advantage(rewards: jnp.ndarray, dones: jnp.ndarray, values: jnp.ndar
 
 
 def compute_advantage_multiagent(rewards_multiagent: jnp.ndarray, dones: jnp.ndarray, values_multiagent: jnp.ndarray,
-                               next_values_multiagent: jnp.ndarray, discount: float, length: int,
+                               next_values_multiagent: jnp.ndarray, discount: float, time_limit: int,
                                use_mc_return: bool = False) -> jnp.ndarray:
     if use_mc_return:
         last_values_multiagent = next_values_multiagent[:, -1]
-        returns_multiagent = compute_returns_multiagent(rewards_multiagent, dones, last_values_multiagent, discount, length)
+        returns_multiagent = compute_returns_multiagent(rewards_multiagent, dones, last_values_multiagent, discount, time_limit)
         advantages = returns_multiagent - values_multiagent
     else:
         advantages = rewards_multiagent + discount * next_values_multiagent - values_multiagent
@@ -68,7 +68,7 @@ def get_statistics(arr: jnp.array):
 
 def update(actor: Model, intrinsic: RewardAndCriticsModel,
            data: PaddedTrajectoryData, discount: float, entropy_coef: float, mix_coef: float,
-           length: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
+           time_limit: int, use_recurrent_policy: bool, init_carry: Optional[jnp.ndarray] = None,
            use_mc_return: bool = False) -> Tuple[Model, InfoDict]:
     all_meta_rewards = intrinsic.get_rewards(data.states)
     indices = (*jnp.indices(data.actions.shape), data.actions)
@@ -76,7 +76,7 @@ def update(actor: Model, intrinsic: RewardAndCriticsModel,
     mixed_rewards = jnp.expand_dims(data.rewards, axis=2) + mix_coef * meta_rewards
     values = intrinsic.get_values(data.states)
     next_values = intrinsic.get_values(data.next_states)
-    advantages = compute_advantage(mixed_rewards, data.is_ended, values, next_values, discount, length, use_mc_return)
+    advantages = compute_advantage(mixed_rewards, data.is_ended, values, next_values, discount, time_limit, use_mc_return)
 
     def actor_loss_fn(actor_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         return get_actor_loss(actor.replace(params=actor_params), advantages,

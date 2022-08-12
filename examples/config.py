@@ -45,7 +45,6 @@ def get_config():
     }
     config.meta_kwargs = {
         'reward_lr': 3e-4,
-        'mimic_sgd': False,
         'sampling_scheme': 'reuse',
         'mix_coef': 0.1,
         'use_shared_reward': False,

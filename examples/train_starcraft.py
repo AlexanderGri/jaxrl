@@ -70,13 +70,13 @@ def main(_):
     np.random.seed(config.seed)
     random.seed(config.seed)
 
-    agent = MetaPGLearner(config.seed,
-                          dummy_states_batch,
-                          dummy_observations_batch,
-                          dummy_available_actions_batch,
-                          env_info["n_actions"],
-                          env_info["time_limit"],
-                          env_info["n_agents"],
+    agent = MetaPGLearner(seed=config.seed,
+                          states=dummy_states_batch,
+                          observations=dummy_observations_batch,
+                          available_actions=dummy_available_actions_batch,
+                          n_actions=env_info["n_actions"],
+                          time_limit=env_info["time_limit"],
+                          n_agents=env_info["n_agents"],
                           **config.learner_kwargs)
 
     if config.model_load_path != '':
@@ -103,8 +103,7 @@ def main(_):
 
         update_only_intrinsic = (FLAGS.config.stop_agent_training_at != -1) and \
                                 (FLAGS.config.stop_agent_training_at < step_counter.total_steps)
-        update_info = agent.update_except_actor(prev_data, data, prev_actor,
-                                                update_only_intrinsic)
+        update_info = agent.update_except_actor(prev_data, data, prev_actor, update_only_intrinsic)
         if update_only_intrinsic:
             agent.actor = prev_actor
             prev_data, _ = collect_trajectories(envs, agent,
