@@ -1,7 +1,8 @@
+import contextlib
 from functools import partial
 import multiprocessing
+import os
 from typing import Tuple, List, Dict, Iterable as It
-from time import sleep
 
 import numpy as np
 
@@ -29,10 +30,11 @@ class SubprocVecStarcraft:
         self.remotes, self.work_remotes = zip(*[ctx.Pipe(duplex=True) for _ in range(num_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes, env_fns):
-            args = (work_remote, remote, env_fn)
+            args = (work_remote, remote, CloudpickleWrapper(env_fn))
             # daemon=True: if the main process crashes, we should not cause things to hang
             process = ctx.Process(target=_worker, args=args, daemon=True)  # pytype:disable=attribute-error
-            process.start()
+            with clear_mpi_env_vars():
+                process.start()
 
             self.processes.append(process)
             work_remote.close()
@@ -211,6 +213,42 @@ def _worker(remote, parent_remote, env_fn):
                 raise NotImplementedError("`{}` is not implemented in the worker".format(cmd))
         except EOFError:
             break
+
+
+class CloudpickleWrapper(object):
+    """
+    Uses cloudpickle to serialize contents (otherwise multiprocessing tries to use pickle)
+    """
+
+    def __init__(self, x):
+        self.x = x
+
+    def __getstate__(self):
+        import cloudpickle
+        return cloudpickle.dumps(self.x)
+
+    def __setstate__(self, ob):
+        import pickle
+        self.x = pickle.loads(ob)
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """
+    from mpi4py import MPI will call MPI_Init by default.  If the child process has MPI environment variables, MPI will think that the child process is an MPI process just like the parent and do bad things such as hang.
+    This context manager is a hacky way to clear those environment variables temporarily such as when we are starting multiprocessing
+    Processes.
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ['OMPI_', 'PMI_']:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)
 
 
 def process_array(arg):
