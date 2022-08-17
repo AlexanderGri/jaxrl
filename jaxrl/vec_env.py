@@ -30,7 +30,7 @@ class SubprocVecStarcraft:
         self.remotes, self.work_remotes = zip(*[ctx.Pipe(duplex=True) for _ in range(num_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes, env_fns):
-            args = (work_remote, remote, CloudpickleWrapper(env_fn))
+            args = (work_remote, remote, env_fn)
             # daemon=True: if the main process crashes, we should not cause things to hang
             process = ctx.Process(target=_worker, args=args, daemon=True)  # pytype:disable=attribute-error
             with clear_mpi_env_vars():
@@ -213,23 +213,6 @@ def _worker(remote, parent_remote, env_fn):
                 raise NotImplementedError("`{}` is not implemented in the worker".format(cmd))
         except EOFError:
             break
-
-
-class CloudpickleWrapper(object):
-    """
-    Uses cloudpickle to serialize contents (otherwise multiprocessing tries to use pickle)
-    """
-
-    def __init__(self, x):
-        self.x = x
-
-    def __getstate__(self):
-        import cloudpickle
-        return cloudpickle.dumps(self.x)
-
-    def __setstate__(self, ob):
-        import pickle
-        self.x = pickle.loads(ob)
 
 
 @contextlib.contextmanager
