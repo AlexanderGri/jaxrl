@@ -9,7 +9,8 @@ import jax.numpy as jnp
 import optax
 
 
-default_kernel_init = nn.initializers.lecun_normal
+from jaxrl.extra_utils import orthogonal
+
 
 PRNGKey = Any
 Params = flax.core.FrozenDict[str, Any]
@@ -17,6 +18,10 @@ PRNGKey = Any
 Shape = Sequence[int]
 Dtype = Any  # this could be a real type?
 InfoDict = Dict[str, float]
+
+
+def default_kernel_init(scale: Optional[float] = jnp.sqrt(2)):
+    return orthogonal(scale)
 
 
 class Recurrent(nn.Module):
@@ -43,7 +48,7 @@ class GRU(nn.Module):
         split_rngs={'params': False})
     @nn.compact
     def __call__(self, carry: jnp.ndarray, x: jnp.ndarray):
-        return nn.GRUCell()(carry, x)
+        return nn.GRUCell(recurrent_kernel_init=orthogonal())(carry, x)
 
     @staticmethod
     def initialize_carry(batch_dims: Shape,
