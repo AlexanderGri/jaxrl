@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import optax
 
 
+default_kernel_init = nn.initializers.lecun_normal
+
 PRNGKey = Any
 Params = flax.core.FrozenDict[str, Any]
 PRNGKey = Any
