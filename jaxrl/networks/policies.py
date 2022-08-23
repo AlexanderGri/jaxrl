@@ -10,7 +10,7 @@ from tensorflow_probability.substrates import jax as tfp
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-from jaxrl.networks.common import MLP, Params, PRNGKey, default_init, Recurrent
+from jaxrl.networks.common import MLP, Params, PRNGKey, default_kernel_init, Recurrent
 
 LOG_STD_MIN = -10.0
 LOG_STD_MAX = 2.0
@@ -94,7 +94,7 @@ class MSEPolicy(nn.Module):
                                                       training=training)
 
         actions = nn.Dense(self.action_dim,
-                           kernel_init=default_init())(outputs)
+                           kernel_init=default_kernel_init())(outputs)
         return nn.tanh(actions)
 
 
@@ -120,14 +120,14 @@ class NormalTanhPolicy(nn.Module):
                                                       training=training)
 
         means = nn.Dense(self.action_dim,
-                         kernel_init=default_init(
+                         kernel_init=default_kernel_init(
                              self.final_fc_init_scale))(outputs)
         if self.init_mean is not None:
             means += self.init_mean
 
         if self.state_dependent_std:
             log_stds = nn.Dense(self.action_dim,
-                                kernel_init=default_init(
+                                kernel_init=default_kernel_init(
                                     self.final_fc_init_scale))(outputs)
         else:
             log_stds = self.param('log_stds', nn.initializers.zeros,
@@ -167,12 +167,12 @@ class NormalTanhMixturePolicy(nn.Module):
                                                       training=training)
 
         logits = nn.Dense(self.action_dim * self.num_components,
-                          kernel_init=default_init())(outputs)
+                          kernel_init=default_kernel_init())(outputs)
         means = nn.Dense(self.action_dim * self.num_components,
-                         kernel_init=default_init(),
+                         kernel_init=default_kernel_init(),
                          bias_init=nn.initializers.normal(stddev=1.0))(outputs)
         log_stds = nn.Dense(self.action_dim * self.num_components,
-                            kernel_init=default_init())(outputs)
+                            kernel_init=default_kernel_init())(outputs)
 
         shape = list(observations.shape[:-1]) + [-1, self.num_components]
         logits = jnp.reshape(logits, shape)
