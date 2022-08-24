@@ -49,7 +49,7 @@ def orthogonal(scale=1.0, column_axis=-1, dtype=jnp.float_):
     n_rows, n_cols = prod(shape) // shape[column_axis], shape[column_axis]
     matrix_shape = (n_cols, n_rows) if n_rows < n_cols else (n_rows, n_cols)
     A = random.normal(key, matrix_shape, dtype)
-    Q, R = factor_mgs(A)
+    Q, R = qr(A)
     diag_sign = lax.broadcast_to_rank(jnp.sign(jnp.diag(R)), rank=Q.ndim)
     Q *= diag_sign # needed for a uniform distribution
     if n_rows < n_cols: Q = Q.T
