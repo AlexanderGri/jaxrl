@@ -68,6 +68,7 @@ def main(_):
         train_one_batch_per_update(envs, agent, logger)
     elif config.meta_kwargs.sampling_scheme == 'double':
         train_two_batches_per_update(envs, agent, logger)
+    envs.close()
 
 
 def train_one_batch_per_update(envs, agent, logger):
