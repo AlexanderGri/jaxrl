@@ -103,7 +103,7 @@ class Logger:
 
     def eval_periodically(self, envs, agent):
         if self.step_counter.check_key('eval'):
-            num_trajectories_per_env = self.config.eval_episodes // self.config.num_envs
+            num_trajectories_per_env = self.config.eval_episodes // self.config.num_envs + 1
             _, eval_info = collect_trajectories(envs, agent,
                                                 num_trajectories_per_env=num_trajectories_per_env,
                                                 distribution='det')
