@@ -136,8 +136,6 @@ class MetaPGLearner(object):
         self.actor_recurrent_hidden_dim = actor_recurrent_hidden_dim
         self.n_agents = n_agents
 
-        assert use_shared_reward or not use_shared_value
-
         if self.optimizer_name == 'adam':
             Optimizer = functools.partial(optax.adam, eps_root=1e-8)
         elif self.optimizer_name == 'rmsprop':
